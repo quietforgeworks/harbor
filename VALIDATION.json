@@ -1,0 +1,191 @@
+{
+  "product": "Harbor",
+  "version": "0.2.0",
+  "build": 8,
+  "date": "2026-11-08",
+  "result": "passed_with_documented_limits",
+  "environment": {
+    "architecture": "arm64",
+    "testedOS": "macOS 27.2 (26B123)",
+    "deploymentMinimum": "macOS 26.0",
+    "xcode": "27.2 (27B52)",
+    "swift": "6.4.2",
+    "go": "1.26.10",
+    "macOS26PhysicalMachineTested": false
+  },
+  "appPackage": {
+    "file": "Harbor-0.2.0-macOS-arm64.zip",
+    "sha256": "26cf550964ef9a3dbf62367eed1f9a014ae2f813fe9b1a760ffa715038a2af94",
+    "zipIntegrity": "pass",
+    "codeSignature": "ad-hoc; deep strict verification passed after removing test-filesystem-added Finder metadata",
+    "developerIDSigned": false,
+    "notarized": false,
+    "installed": false
+  },
+  "tests": {
+    "swiftTests": {
+      "passed": 75,
+      "failed": 0
+    },
+    "releaseBuild": "pass",
+    "finalPackageFunctionalChecks": {
+      "airportSwitchWithoutCoreRestart": true,
+      "cancelTestPreservesConnection": true,
+      "currentNodeTestOnlyOneResult": true,
+      "editedRulePresentInCore": true,
+      "fullRuleEditSaved": true,
+      "invalidRuleEditPreservesConfiguration": true,
+      "resetRestoresDefaults": true,
+      "unavailableAirportPreservesSession": true
+    },
+    "finalPackageFunctionalAttempts": [
+      "First attempt timed out during a rule-check operation. No production settings changed.",
+      "Fresh isolated retry passed all eight checks. Cause of the transient timeout is not established."
+    ],
+    "ui": {
+      "sameWindow": true,
+      "animationStopped": true,
+      "pages": [
+        "home",
+        "settings",
+        "airports",
+        "nodes",
+        "search-editing",
+        "rules"
+      ],
+      "transitions": 8,
+      "interruptedTransitions": 3
+    },
+    "routing": {
+      "routingPassed": true,
+      "selectionPreserved": true,
+      "availabilityPassed": true,
+      "originalHarnessStatus": "fail",
+      "originalHttpsTrafficProofPassed": false,
+      "scope": "initial HTTPS response only; redirects not followed; page content capped at 65536 bytes",
+      "checks": [
+        {
+          "mode": "rule",
+          "host": "apple.com",
+          "expectedPolicy": "DIRECT",
+          "routingPassed": true,
+          "httpStatus": 301,
+          "coreTrafficObserved": true
+        },
+        {
+          "mode": "rule",
+          "host": "chatgpt.com",
+          "expectedPolicy": "SELECT",
+          "routingPassed": true,
+          "httpStatus": 200,
+          "coreTrafficObserved": true
+        },
+        {
+          "mode": "rule",
+          "host": "claude.ai",
+          "expectedPolicy": "SELECT",
+          "routingPassed": true,
+          "httpStatus": 302,
+          "coreTrafficObserved": true
+        },
+        {
+          "mode": "rule",
+          "host": "example.com",
+          "expectedPolicy": "DIRECT",
+          "routingPassed": true,
+          "httpStatus": 200,
+          "coreTrafficObserved": true
+        },
+        {
+          "mode": "rule",
+          "host": "gemini.google.com",
+          "expectedPolicy": "SELECT",
+          "routingPassed": true,
+          "httpStatus": 200,
+          "coreTrafficObserved": true
+        },
+        {
+          "mode": "global",
+          "host": "apple.com",
+          "expectedPolicy": "SELECT",
+          "routingPassed": true,
+          "httpStatus": 301,
+          "coreTrafficObserved": false
+        },
+        {
+          "mode": "global",
+          "host": "chatgpt.com",
+          "expectedPolicy": "SELECT",
+          "routingPassed": true,
+          "httpStatus": 200,
+          "coreTrafficObserved": true
+        },
+        {
+          "mode": "global",
+          "host": "claude.ai",
+          "expectedPolicy": "SELECT",
+          "routingPassed": true,
+          "httpStatus": 302,
+          "coreTrafficObserved": true
+        },
+        {
+          "mode": "global",
+          "host": "example.com",
+          "expectedPolicy": "SELECT",
+          "routingPassed": true,
+          "httpStatus": 200,
+          "coreTrafficObserved": true
+        },
+        {
+          "mode": "global",
+          "host": "gemini.google.com",
+          "expectedPolicy": "SELECT",
+          "routingPassed": true,
+          "httpStatus": 200,
+          "coreTrafficObserved": true
+        }
+      ],
+      "limitation": "The polling sampler missed the fast global-mode Apple HTTP 301 connection; its original aggregate status remains fail. A separate explicit-proxy byte-counter check below passed."
+    },
+    "supplementalExplicitProxy": {
+      "scope": "single explicit HTTPS request through isolated MATCH,SELECT core; no system setting changes",
+      "host": "apple.com",
+      "httpStatus": 301,
+      "curlExit": 0,
+      "uploadBytesDelta": 478,
+      "downloadBytesDelta": 3712,
+      "passed": true
+    }
+  },
+  "core": {
+    "version": "v1.19.33-harbor.1",
+    "sourceBase": "MetaCubeX/mihomo v1.19.33",
+    "unsignedReproducibleBinarySha256": "864c4877c61372157bfb838d50f600dcf290c87fbd67d236952908c7a540c82d",
+    "offlineRebuildsMatched": true,
+    "dependencyModulesWithNotices": 132,
+    "patches": [
+      "Remove EasyTier and its unresolvable embedded WebAssembly provenance; reject EasyTier explicitly.",
+      "Remove GPLv2 go-lzo dependency; reject LZO-compressed data explicitly."
+    ],
+    "protocolScope": "Harbor does not expose EasyTier or OpenVPN as supported node types.",
+    "targetedTests": [
+      "EasyTier fail-closed constructor passed",
+      "OpenVPN/LZO rejection tests passed"
+    ],
+    "fullUpstreamNetworkTunSuiteRun": false
+  },
+  "isolation": {
+    "systemProxyBeforeAfterIdentical": true,
+    "existingProxyListenerPreserved": true,
+    "existingInstalledHarborChanged": false,
+    "originalUserFilesModified": false,
+    "testFilesContainedInNewCodexFolder": true
+  },
+  "notTested": [
+    "Independent macOS 26 physical machine",
+    "Fresh-Mac installation and Gatekeeper experience",
+    "Live system-proxy takeover or forced crash recovery while an existing user connection was active",
+    "Account login, location eligibility, AI chat/upload workflows",
+    "TUN and UDP/QUIC interception (not product features)"
+  ]
+}
