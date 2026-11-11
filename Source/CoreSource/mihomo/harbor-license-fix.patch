@@ -1,0 +1,1962 @@
+--- a/adapter/outbound/easytier.go
++++ /dev/null
+@@ -1,613 +0,0 @@
+-//go:build !no_easytier
+-
+-package outbound
+-
+-import (
+-	"context"
+-	"errors"
+-	"fmt"
+-	"net"
+-	"net/netip"
+-	"os"
+-	"path/filepath"
+-	"strings"
+-	"sync"
+-	"time"
+-
+-	"github.com/metacubex/mihomo/component/easytier"
+-	"github.com/metacubex/mihomo/component/resolver"
+-	C "github.com/metacubex/mihomo/constant"
+-	"github.com/metacubex/mihomo/dns"
+-	"github.com/metacubex/mihomo/log"
+-
+-	corehost "github.com/easytier/easytier/easytier-go"
+-	D "github.com/miekg/dns"
+-)
+-
+-const (
+-	easyTierDefaultStateDir = "easytier"
+-	easyTierInstanceIDFile  = "instance_id"
+-	easyTierDNSTTL          = 60
+-	easyTierMinBackoff      = time.Second
+-	easyTierMaxBackoff      = 30 * time.Second
+-)
+-
+-var errEasyTierClosed = errors.New("easytier outbound closed")
+-
+-type EasyTier struct {
+-	*Base
+-	option     EasyTierOption
+-	configTOML string
+-	stateDir   string
+-	instanceID string
+-	zone       string
+-	ctx        context.Context
+-	cancel     context.CancelFunc
+-	loopOnce   sync.Once
+-	startMu    sync.Mutex
+-	closed     bool
+-	readyCh    chan struct{}
+-	mu         sync.Mutex
+-	host       *corehost.Host
+-	instance   *corehost.Instance
+-	unregister func()
+-}
+-
+-type EasyTierOption struct {
+-	BasicOption
+-	Name                string   `proxy:"name"`
+-	NetworkName         string   `proxy:"network-name,omitempty"`
+-	NetworkSecret       string   `proxy:"network-secret,omitempty"`
+-	Hostname            string   `proxy:"hostname,omitempty"`
+-	IPv4                string   `proxy:"ipv4,omitempty"`
+-	DHCP                bool     `proxy:"dhcp,omitempty"`
+-	Peers               []string `proxy:"peers,omitempty"`
+-	Listeners           []string `proxy:"listeners,omitempty"`
+-	NoListener          *bool    `proxy:"no-listener,omitempty"`
+-	MappedListeners     []string `proxy:"mapped-listeners,omitempty"`
+-	ExitNodes           []string `proxy:"exit-nodes,omitempty"`
+-	ProxyNetworks       []string `proxy:"proxy-networks,omitempty"`
+-	InstanceName        string   `proxy:"instance-name,omitempty"`
+-	StateDir            string   `proxy:"state-dir,omitempty"`
+-	UDP                 bool     `proxy:"udp,omitempty"`
+-	AcceptDNS           *bool    `proxy:"accept-dns,omitempty"`
+-	EnableExitNode      *bool    `proxy:"enable-exit-node,omitempty"`
+-	EnableEncryption    *bool    `proxy:"enable-encryption,omitempty"`
+-	EncryptionAlgorithm string   `proxy:"encryption-algorithm,omitempty"`
+-	PrivateMode         *bool    `proxy:"private-mode,omitempty"`
+-	LatencyFirst        *bool    `proxy:"latency-first,omitempty"`
+-	DisableP2P          *bool    `proxy:"disable-p2p,omitempty"`
+-	EnableKCPProxy      *bool    `proxy:"enable-kcp-proxy,omitempty"`
+-	DisableKCPInput     *bool    `proxy:"disable-kcp-input,omitempty"`
+-	EnableQUICProxy     *bool    `proxy:"enable-quic-proxy,omitempty"`
+-	DisableQUICInput    *bool    `proxy:"disable-quic-input,omitempty"`
+-	MTU                 int      `proxy:"mtu,omitempty"`
+-	TLDDNSZone          string   `proxy:"tld-dns-zone,omitempty"`
+-	SecureMode          *bool    `proxy:"secure-mode,omitempty"`
+-	LocalPrivateKey     string   `proxy:"local-private-key,omitempty"`
+-	LocalPublicKey      string   `proxy:"local-public-key,omitempty"`
+-}
+-
+-func (o EasyTierOption) structuredConfig() easytier.Config {
+-	instanceName := o.InstanceName
+-	if instanceName == "" {
+-		instanceName = o.Name
+-	}
+-	return easytier.Config{
+-		NetworkName:         o.NetworkName,
+-		NetworkSecret:       o.NetworkSecret,
+-		Hostname:            o.Hostname,
+-		IPv4:                o.IPv4,
+-		DHCP:                o.DHCP,
+-		Peers:               o.Peers,
+-		Listeners:           o.Listeners,
+-		NoListener:          o.NoListener,
+-		MappedListeners:     o.MappedListeners,
+-		ExitNodes:           o.ExitNodes,
+-		ProxyNetworks:       o.ProxyNetworks,
+-		InstanceName:        instanceName,
+-		AcceptDNS:           o.AcceptDNS,
+-		EnableExitNode:      o.EnableExitNode,
+-		EnableEncryption:    o.EnableEncryption,
+-		EncryptionAlgorithm: o.EncryptionAlgorithm,
+-		PrivateMode:         o.PrivateMode,
+-		LatencyFirst:        o.LatencyFirst,
+-		DisableP2P:          o.DisableP2P,
+-		EnableKCPProxy:      o.EnableKCPProxy,
+-		DisableKCPInput:     o.DisableKCPInput,
+-		EnableQUICProxy:     o.EnableQUICProxy,
+-		DisableQUICInput:    o.DisableQUICInput,
+-		MTU:                 o.MTU,
+-		TLDDNSZone:          o.TLDDNSZone,
+-		SecureMode:          o.SecureMode,
+-		LocalPrivateKey:     o.LocalPrivateKey,
+-		LocalPublicKey:      o.LocalPublicKey,
+-	}
+-}
+-
+-func NewEasyTier(option EasyTierOption) (*EasyTier, error) {
+-	configTOML, err := option.structuredConfig().RenderTOML()
+-	if err != nil {
+-		return nil, err
+-	}
+-	configTOML = easytier.ApplyRequiredFlags(configTOML)
+-
+-	stateDir := option.StateDir
+-	if stateDir == "" {
+-		stateDir = filepath.Join(easyTierDefaultStateDir, option.Name)
+-	}
+-	stateDir = C.Path.Resolve(stateDir)
+-	if !C.Path.IsSafePath(stateDir) {
+-		return nil, C.Path.ErrNotSafePath(stateDir)
+-	}
+-
+-	addr := option.NetworkName
+-	if addr == "" {
+-		addr = "easytier"
+-	}
+-	ctx, cancel := context.WithCancel(context.Background())
+-	outbound := &EasyTier{
+-		Base: NewBase(BaseOption{
+-			Name:         option.Name,
+-			Addr:         addr,
+-			Type:         C.EasyTier,
+-			ProviderName: option.ProviderName,
+-			UDP:          option.UDP,
+-			Interface:    option.Interface,
+-			RoutingMark:  option.RoutingMark,
+-			Prefer:       option.IPVersion,
+-		}),
+-		option:     option,
+-		configTOML: configTOML,
+-		stateDir:   stateDir,
+-		zone:       easytier.NormalizeZone(option.TLDDNSZone),
+-		ctx:        ctx,
+-		cancel:     cancel,
+-	}
+-	outbound.dialer = option.NewDialer(outbound.DialOptions())
+-	outbound.unregister = dns.RegisterEasyTierDnsClient(option.Name, easyTierDNSTransport{easytier: outbound})
+-	return outbound, nil
+-}
+-
+-func (e *EasyTier) ensureStarted(ctx context.Context) error {
+-	e.loopOnce.Do(func() {
+-		go e.loop()
+-	})
+-	for {
+-		if err := e.ctx.Err(); err != nil {
+-			return errEasyTierClosed
+-		}
+-		e.startMu.Lock()
+-		closed := e.closed
+-		readyCh := e.readyCh
+-		e.startMu.Unlock()
+-		if closed {
+-			return errEasyTierClosed
+-		}
+-		e.mu.Lock()
+-		instance := e.instance
+-		e.mu.Unlock()
+-		if instance != nil && instance.State() == corehost.StateRunning {
+-			return nil
+-		}
+-		if readyCh == nil {
+-			e.startMu.Lock()
+-			if e.readyCh == nil {
+-				e.readyCh = make(chan struct{})
+-			}
+-			readyCh = e.readyCh
+-			e.startMu.Unlock()
+-		}
+-		select {
+-		case <-ctx.Done():
+-			return ctx.Err()
+-		case <-e.ctx.Done():
+-			return errEasyTierClosed
+-		case <-readyCh:
+-		}
+-	}
+-}
+-
+-func (e *EasyTier) signalReady() {
+-	e.startMu.Lock()
+-	if e.readyCh != nil {
+-		close(e.readyCh)
+-		e.readyCh = nil
+-	}
+-	e.startMu.Unlock()
+-}
+-
+-func (e *EasyTier) loop() {
+-	backoff := easyTierMinBackoff
+-	for {
+-		if e.ctx.Err() != nil {
+-			return
+-		}
+-		e.startMu.Lock()
+-		closed := e.closed
+-		e.startMu.Unlock()
+-		if closed {
+-			return
+-		}
+-		err := e.init()
+-		if err != nil {
+-			log.Warnln("[EasyTier](%s) start failed: %v; retry in %s", e.Name(), err, backoff)
+-			_ = e.shutdown()
+-			timer := time.NewTimer(backoff)
+-			select {
+-			case <-e.ctx.Done():
+-				timer.Stop()
+-				return
+-			case <-timer.C:
+-			}
+-			if backoff < easyTierMaxBackoff {
+-				backoff *= 2
+-				if backoff > easyTierMaxBackoff {
+-					backoff = easyTierMaxBackoff
+-				}
+-			}
+-			continue
+-		}
+-		backoff = easyTierMinBackoff
+-		e.signalReady()
+-		reason := e.serve()
+-		_ = e.shutdown()
+-		if e.ctx.Err() != nil {
+-			return
+-		}
+-		e.startMu.Lock()
+-		closed = e.closed
+-		e.startMu.Unlock()
+-		if closed {
+-			return
+-		}
+-		if reason == "" {
+-			reason = "instance stopped"
+-		}
+-		log.Warnln("[EasyTier](%s) %s; restarting in %s", e.Name(), reason, backoff)
+-		timer := time.NewTimer(backoff)
+-		select {
+-		case <-e.ctx.Done():
+-			timer.Stop()
+-			return
+-		case <-timer.C:
+-		}
+-		if backoff < easyTierMaxBackoff {
+-			backoff *= 2
+-			if backoff > easyTierMaxBackoff {
+-				backoff = easyTierMaxBackoff
+-			}
+-		}
+-	}
+-}
+-
+-func (e *EasyTier) init() error {
+-	if err := os.MkdirAll(e.stateDir, 0o755); err != nil {
+-		return fmt.Errorf("easytier: create state-dir: %w", err)
+-	}
+-	instanceID := loadInstanceID(e.stateDir)
+-	instanceName := e.option.InstanceName
+-	if instanceName == "" {
+-		instanceName = e.option.Name
+-	}
+-	host, err := corehost.New(e.ctx, corehost.Options{
+-		Platform: easytier.Services(e.dialer),
+-	})
+-	if err != nil {
+-		return err
+-	}
+-	e.mu.Lock()
+-	e.host = host
+-	e.mu.Unlock()
+-
+-	instance, err := host.CreateInstanceTOML(e.ctx, instanceName, instanceID, e.configTOML)
+-	if err != nil {
+-		return err
+-	}
+-	e.mu.Lock()
+-	e.instance = instance
+-	e.instanceID = instance.ID()
+-	e.mu.Unlock()
+-	if err := writeInstanceID(e.stateDir, instance.ID()); err != nil {
+-		return err
+-	}
+-	if err := instance.Start(e.ctx); err != nil {
+-		return err
+-	}
+-	log.Infoln("[EasyTier](%s) instance %s running", e.Name(), instance.ID())
+-	return nil
+-}
+-
+-func (e *EasyTier) currentInstance() (*corehost.Instance, error) {
+-	e.mu.Lock()
+-	defer e.mu.Unlock()
+-	if e.instance == nil {
+-		return nil, errors.New("easytier instance is not ready")
+-	}
+-	return e.instance, nil
+-}
+-
+-func (e *EasyTier) serve() string {
+-	e.mu.Lock()
+-	instance := e.instance
+-	e.mu.Unlock()
+-	if instance == nil {
+-		return "instance is not ready"
+-	}
+-	// Manual connectors retry inside core (reconnect_interval, default 1s).
+-	// Events() is best-effort: a full host queue drops the event and does not
+-	// stall the guest. Drain it for logs; recreate only when the stream closes.
+-	events := instance.Events()
+-	if events == nil {
+-		if err := instance.Wait(e.ctx); err != nil && e.ctx.Err() == nil {
+-			return err.Error()
+-		}
+-		return "instance stopped"
+-	}
+-	for {
+-		select {
+-		case <-e.ctx.Done():
+-			return ""
+-		case event, ok := <-events:
+-			if !ok {
+-				return "instance stopped"
+-			}
+-			switch event.Kind {
+-			case "peer_added", "peer_removed":
+-				log.Infoln("[EasyTier](%s) %s: %s", e.Name(), event.Kind, event.Message)
+-			default:
+-				log.Debugln("[EasyTier](%s) %s: %s", e.Name(), event.Kind, event.Message)
+-			}
+-		}
+-	}
+-}
+-
+-func (e *EasyTier) overlayNodes(ctx context.Context) ([]easytier.Node, error) {
+-	instance, err := e.currentInstance()
+-	if err != nil {
+-		return nil, err
+-	}
+-	var nodes []easytier.Node
+-	info, err := instance.ShowNodeInfo(ctx)
+-	if err == nil && info != nil {
+-		node := easytier.Node{Hostname: info.GetHostname()}
+-		if ip, parseErr := easytier.ParseNodeIPv4(info.GetIpv4Addr()); parseErr == nil {
+-			node.IPv4 = ip
+-		}
+-		if node.Hostname != "" || node.IPv4.IsValid() {
+-			nodes = append(nodes, node)
+-		}
+-	}
+-	routes, err := instance.ListRoute(ctx)
+-	if err != nil {
+-		if len(nodes) == 0 {
+-			return nil, err
+-		}
+-		return nodes, nil
+-	}
+-	for _, route := range routes {
+-		if route == nil {
+-			continue
+-		}
+-		inet := route.GetIpv4Addr()
+-		if inet == nil || inet.GetAddress() == nil {
+-			continue
+-		}
+-		nodes = append(nodes, easytier.Node{
+-			Hostname: route.GetHostname(),
+-			IPv4:     easytier.IPv4FromUint32(inet.GetAddress().GetAddr()),
+-		})
+-	}
+-	return nodes, nil
+-}
+-
+-func (e *EasyTier) resolveIPv4(ctx context.Context, host string) (netip.Addr, error) {
+-	if ip, err := netip.ParseAddr(host); err == nil {
+-		ip = ip.Unmap()
+-		if !ip.Is4() {
+-			return netip.Addr{}, fmt.Errorf("easytier: overlay dial supports IPv4 only")
+-		}
+-		return ip, nil
+-	}
+-	nodes, err := e.overlayNodes(ctx)
+-	if err != nil {
+-		return netip.Addr{}, err
+-	}
+-	if ip, ok := easytier.LookupOverlayHost(host, e.zone, nodes); ok {
+-		return ip, nil
+-	}
+-	if easytier.IsMagicDNS(host, e.zone) {
+-		return netip.Addr{}, fmt.Errorf("easytier: overlay hostname %q was not found", host)
+-	}
+-	ips, err := resolver.LookupIPv4WithResolver(ctx, host, resolver.ProxyServerHostResolver)
+-	if err != nil {
+-		return netip.Addr{}, err
+-	}
+-	if len(ips) == 0 {
+-		return netip.Addr{}, fmt.Errorf("easytier: resolve %q: no IPv4 address", host)
+-	}
+-	return ips[0], nil
+-}
+-
+-func (e *EasyTier) DialContext(ctx context.Context, metadata *C.Metadata) (_ C.Conn, err error) {
+-	if err = e.ensureStarted(ctx); err != nil {
+-		return nil, err
+-	}
+-	host := metadata.Host
+-	if host == "" && metadata.DstIP.IsValid() {
+-		host = metadata.DstIP.String()
+-	}
+-	ip, err := e.resolveIPv4(ctx, host)
+-	if err != nil {
+-		return nil, err
+-	}
+-	instance, err := e.currentInstance()
+-	if err != nil {
+-		return nil, err
+-	}
+-	address := net.JoinHostPort(ip.String(), fmt.Sprintf("%d", metadata.DstPort))
+-	conn, err := instance.Dial(ctx, "tcp4", address)
+-	if err != nil {
+-		return nil, err
+-	}
+-	if conn == nil {
+-		return nil, errors.New("conn is nil")
+-	}
+-	return NewConn(conn, e), nil
+-}
+-
+-func (e *EasyTier) ListenPacketContext(ctx context.Context, metadata *C.Metadata) (_ C.PacketConn, err error) {
+-	if err = e.ensureStarted(ctx); err != nil {
+-		return nil, err
+-	}
+-	if err = e.ResolveUDP(ctx, metadata); err != nil {
+-		return nil, err
+-	}
+-	instance, err := e.currentInstance()
+-	if err != nil {
+-		return nil, err
+-	}
+-	pc, err := instance.ListenPacket("udp4", ":0")
+-	if err != nil {
+-		return nil, err
+-	}
+-	if pc == nil {
+-		return nil, errors.New("packetConn is nil")
+-	}
+-	return NewPacketConn(pc, e), nil
+-}
+-
+-func (e *EasyTier) ResolveUDP(ctx context.Context, metadata *C.Metadata) error {
+-	if metadata.Host != "" {
+-		ip, err := e.resolveIPv4(ctx, metadata.Host)
+-		if err != nil {
+-			return fmt.Errorf("can't resolve ip: %w", err)
+-		}
+-		metadata.DstIP = ip
+-		return nil
+-	}
+-	if metadata.DstIP.IsValid() && !metadata.DstIP.Is4() {
+-		return fmt.Errorf("easytier: overlay dial supports IPv4 only")
+-	}
+-	return nil
+-}
+-
+-func (e *EasyTier) ProxyInfo() C.ProxyInfo {
+-	info := e.Base.ProxyInfo()
+-	info.DialerProxy = e.option.DialerProxy
+-	return info
+-}
+-
+-func (e *EasyTier) IsL3Protocol(*C.Metadata) bool {
+-	return true
+-}
+-
+-func (e *EasyTier) Close() error {
+-	e.cancel()
+-	if e.unregister != nil {
+-		e.unregister()
+-	}
+-	e.startMu.Lock()
+-	e.closed = true
+-	if e.readyCh != nil {
+-		close(e.readyCh)
+-		e.readyCh = nil
+-	}
+-	e.startMu.Unlock()
+-	return e.shutdown()
+-}
+-
+-func (e *EasyTier) shutdown() error {
+-	ctx, cancel := context.WithTimeout(context.Background(), C.DefaultTCPTimeout)
+-	defer cancel()
+-	e.mu.Lock()
+-	instance := e.instance
+-	host := e.host
+-	e.instance = nil
+-	e.host = nil
+-	e.mu.Unlock()
+-	var err error
+-	if instance != nil {
+-		err = instance.Close(ctx)
+-	}
+-	if host != nil {
+-		if hostErr := host.Close(ctx); err == nil {
+-			err = hostErr
+-		}
+-	}
+-	return err
+-}
+-
+-type easyTierDNSTransport struct {
+-	easytier *EasyTier
+-}
+-
+-func (t easyTierDNSTransport) Address() string {
+-	return "easytier://" + t.easytier.Name()
+-}
+-
+-func (t easyTierDNSTransport) ResetConnection() {}
+-
+-func (t easyTierDNSTransport) ExchangeContext(ctx context.Context, msg *D.Msg) (*D.Msg, error) {
+-	if len(msg.Question) == 0 {
+-		return nil, errors.New("should have one question at least")
+-	}
+-	if err := t.easytier.ensureStarted(ctx); err != nil {
+-		return nil, err
+-	}
+-	q := msg.Question[0]
+-	nodes, err := t.easytier.overlayNodes(ctx)
+-	if err != nil {
+-		return nil, err
+-	}
+-	reply := new(D.Msg)
+-	reply.SetReply(msg)
+-	reply.Authoritative = true
+-	reply.RecursionAvailable = true
+-	switch q.Qtype {
+-	case D.TypeA:
+-		ip, ok := easytier.LookupOverlayHost(q.Name, t.easytier.zone, nodes)
+-		if !ok {
+-			reply.Rcode = D.RcodeNameError
+-			return reply, nil
+-		}
+-		reply.Answer = append(reply.Answer, &D.A{
+-			Hdr: D.RR_Header{Name: q.Name, Rrtype: D.TypeA, Class: D.ClassINET, Ttl: easyTierDNSTTL},
+-			A:   ip.AsSlice(),
+-		})
+-	case D.TypePTR:
+-		ip, ok := easytier.ParsePTRIPv4(q.Name)
+-		if !ok {
+-			reply.Rcode = D.RcodeNameError
+-			return reply, nil
+-		}
+-		name, ok := easytier.LookupOverlayPTR(ip, t.easytier.zone, nodes)
+-		if !ok {
+-			reply.Rcode = D.RcodeNameError
+-			return reply, nil
+-		}
+-		reply.Answer = append(reply.Answer, &D.PTR{
+-			Hdr: D.RR_Header{Name: q.Name, Rrtype: D.TypePTR, Class: D.ClassINET, Ttl: easyTierDNSTTL},
+-			Ptr: name,
+-		})
+-	default:
+-		reply.Rcode = D.RcodeSuccess
+-	}
+-	return reply, nil
+-}
+-
+-func loadInstanceID(stateDir string) string {
+-	contents, err := os.ReadFile(filepath.Join(stateDir, easyTierInstanceIDFile))
+-	if err != nil {
+-		return ""
+-	}
+-	return strings.TrimSpace(string(contents))
+-}
+-
+-func writeInstanceID(stateDir, id string) error {
+-	if id == "" {
+-		return nil
+-	}
+-	path := filepath.Join(stateDir, easyTierInstanceIDFile)
+-	return os.WriteFile(path, []byte(id+"\n"), 0o600)
+-}
+--- a/adapter/outbound/easytier_stub.go
++++ b/adapter/outbound/easytier_stub.go
+@@ -1,5 +1,3 @@
+-//go:build no_easytier
+-
+ package outbound
+ 
+ import "fmt"
+@@ -44,5 +42,5 @@
+ }
+ 
+ func NewEasyTier(EasyTierOption) (*EasyTier, error) {
+-	return nil, fmt.Errorf("EasyTier support is disabled by \"no_easytier\" build tag")
++	return nil, fmt.Errorf("EasyTier support is disabled in Harbor")
+ }
+--- /dev/null
++++ b/adapter/outbound/harbor_easytier_test.go
+@@ -0,0 +1,10 @@
++package outbound
++
++import "testing"
++
++func TestHarborEasyTierFailsClosed(t *testing.T) {
++	p, err := NewEasyTier(EasyTierOption{})
++	if p != nil || err == nil {
++		t.Fatal("disabled EasyTier must return no proxy and an error")
++	}
++}
+--- a/component/easytier/overlay.go
++++ /dev/null
+@@ -1,138 +0,0 @@
+-package easytier
+-
+-import (
+-	"encoding/binary"
+-	"fmt"
+-	"net/netip"
+-	"strconv"
+-	"strings"
+-)
+-
+-const DefaultTLDDNSZone = "et.net."
+-
+-// Node describes one overlay IPv4 hostname mapping.
+-type Node struct {
+-	Hostname string
+-	IPv4     netip.Addr
+-}
+-
+-// NormalizeDNSName lowercases a name and strips a trailing dot.
+-func NormalizeDNSName(name string) string {
+-	return strings.ToLower(strings.TrimSuffix(strings.TrimSpace(name), "."))
+-}
+-
+-// NormalizeZone returns a MagicDNS zone without a trailing dot.
+-func NormalizeZone(zone string) string {
+-	zone = NormalizeDNSName(zone)
+-	if zone == "" {
+-		return NormalizeDNSName(DefaultTLDDNSZone)
+-	}
+-	return zone
+-}
+-
+-// OverlayNames returns hostname forms that MagicDNS may use.
+-func OverlayNames(hostname, zone string) []string {
+-	hostname = NormalizeDNSName(hostname)
+-	if hostname == "" {
+-		return nil
+-	}
+-	zone = NormalizeZone(zone)
+-	names := []string{hostname}
+-	if hostname != zone && !strings.HasSuffix(hostname, "."+zone) {
+-		names = append(names, hostname+"."+zone)
+-	}
+-	return names
+-}
+-
+-// IsMagicDNS reports whether host should stay on the overlay resolver.
+-func IsMagicDNS(host, zone string) bool {
+-	host = NormalizeDNSName(host)
+-	if host == "" {
+-		return false
+-	}
+-	zone = NormalizeZone(zone)
+-	return host == zone || strings.HasSuffix(host, "."+zone)
+-}
+-
+-// LookupOverlayHost finds an overlay IPv4 address for host.
+-func LookupOverlayHost(host, zone string, nodes []Node) (netip.Addr, bool) {
+-	host = NormalizeDNSName(host)
+-	if host == "" {
+-		return netip.Addr{}, false
+-	}
+-	for _, node := range nodes {
+-		if !node.IPv4.IsValid() || !node.IPv4.Is4() {
+-			continue
+-		}
+-		for _, name := range OverlayNames(node.Hostname, zone) {
+-			if host == name {
+-				return node.IPv4, true
+-			}
+-		}
+-	}
+-	return netip.Addr{}, false
+-}
+-
+-// LookupOverlayPTR finds a MagicDNS name for an overlay IPv4 address.
+-func LookupOverlayPTR(ip netip.Addr, zone string, nodes []Node) (string, bool) {
+-	if !ip.IsValid() || !ip.Is4() {
+-		return "", false
+-	}
+-	zone = NormalizeZone(zone)
+-	for _, node := range nodes {
+-		if node.IPv4 != ip {
+-			continue
+-		}
+-		names := OverlayNames(node.Hostname, zone)
+-		if len(names) == 0 {
+-			continue
+-		}
+-		return names[len(names)-1] + ".", true
+-	}
+-	return "", false
+-}
+-
+-// ParseNodeIPv4 parses a node IPv4 address or CIDR such as "10.144.0.1/24".
+-func ParseNodeIPv4(value string) (netip.Addr, error) {
+-	value = strings.TrimSpace(value)
+-	if value == "" {
+-		return netip.Addr{}, fmt.Errorf("easytier: empty overlay IPv4 address")
+-	}
+-	if prefix, err := netip.ParsePrefix(value); err == nil {
+-		return prefix.Addr().Unmap(), nil
+-	}
+-	ip, err := netip.ParseAddr(value)
+-	if err != nil {
+-		return netip.Addr{}, err
+-	}
+-	return ip.Unmap(), nil
+-}
+-
+-// IPv4FromUint32 converts a big-endian IPv4 integer to an address.
+-func IPv4FromUint32(addr uint32) netip.Addr {
+-	var bytes [4]byte
+-	binary.BigEndian.PutUint32(bytes[:], addr)
+-	return netip.AddrFrom4(bytes)
+-}
+-
+-// ParsePTRIPv4 parses an IPv4 PTR name such as "2.0.144.10.in-addr.arpa.".
+-func ParsePTRIPv4(name string) (netip.Addr, bool) {
+-	name = NormalizeDNSName(name)
+-	const suffix = ".in-addr.arpa"
+-	if !strings.HasSuffix(name, suffix) {
+-		return netip.Addr{}, false
+-	}
+-	labels := strings.Split(strings.TrimSuffix(name, suffix), ".")
+-	if len(labels) != 4 {
+-		return netip.Addr{}, false
+-	}
+-	var bytes [4]byte
+-	for i := 0; i < 4; i++ {
+-		part, err := strconv.Atoi(labels[3-i])
+-		if err != nil || part < 0 || part > 255 {
+-			return netip.Addr{}, false
+-		}
+-		bytes[i] = byte(part)
+-	}
+-	return netip.AddrFrom4(bytes), true
+-}
+--- a/component/easytier/overlay_test.go
++++ /dev/null
+@@ -1,41 +0,0 @@
+-package easytier
+-
+-import (
+-	"net/netip"
+-	"testing"
+-)
+-
+-func TestLookupOverlayHost(t *testing.T) {
+-	ip := netip.MustParseAddr("10.144.0.2")
+-	nodes := []Node{{Hostname: "peer", IPv4: ip}}
+-	got, ok := LookupOverlayHost("peer.et.net.", "et.net.", nodes)
+-	if !ok || got != ip {
+-		t.Fatalf("got %v %v", got, ok)
+-	}
+-	if _, ok := LookupOverlayHost("missing", "et.net.", nodes); ok {
+-		t.Fatal("expected miss")
+-	}
+-}
+-
+-func TestParsePTRAndNodeIPv4(t *testing.T) {
+-	ip, ok := ParsePTRIPv4("2.0.144.10.in-addr.arpa.")
+-	if !ok || ip.String() != "10.144.0.2" {
+-		t.Fatalf("ptr: %v %v", ip, ok)
+-	}
+-	got, err := ParseNodeIPv4("10.144.0.1/24")
+-	if err != nil || got.String() != "10.144.0.1" {
+-		t.Fatalf("cidr: %v %v", got, err)
+-	}
+-}
+-
+-func TestIsMagicDNS(t *testing.T) {
+-	if IsMagicDNS("peer", "et.net.") {
+-		t.Fatal("single-label name should not be magic dns")
+-	}
+-	if !IsMagicDNS("peer.et.net", "") {
+-		t.Fatal("expected magic dns")
+-	}
+-	if IsMagicDNS("example.com", "et.net.") {
+-		t.Fatal("public name should not be magic dns")
+-	}
+-}
+--- a/component/easytier/platform.go
++++ /dev/null
+@@ -1,218 +0,0 @@
+-package easytier
+-
+-import (
+-	"context"
+-	"fmt"
+-	"net"
+-	"net/netip"
+-	"strings"
+-
+-	"github.com/metacubex/mihomo/component/dialer"
+-	"github.com/metacubex/mihomo/component/resolver"
+-	C "github.com/metacubex/mihomo/constant"
+-
+-	"github.com/easytier/easytier/easytier-go/platform"
+-	D "github.com/miekg/dns"
+-)
+-
+-// Services wraps a mihomo dialer as EasyTier platform capabilities.
+-func Services(d C.Dialer) platform.Services {
+-	return platform.Services{
+-		Sockets:     SocketFactory{Dialer: d},
+-		DNS:         DNSResolver{},
+-		Environment: ConnectorEnvironment{Dialer: d},
+-	}
+-}
+-
+-// SocketFactory creates sockets through mihomo's dialer.
+-//
+-// EasyTier BindDevice/SocketMark/reuse options are ignored so hole punching
+-// can bind local UDP ports. Interface, routing-mark, and dialer-proxy stay on
+-// the mihomo dialer. Internal TCP reservations bind locally even when
+-// dialer-proxy is set. FakeTCP is not supported.
+-type SocketFactory struct {
+-	Dialer C.Dialer
+-}
+-
+-func (s SocketFactory) ConnectTCP(ctx context.Context, options platform.TCPConnectOptions) (net.Conn, error) {
+-	if options.Purpose == platform.TCPConnectFake {
+-		return nil, fmt.Errorf("easytier: FakeTCP is not supported")
+-	}
+-	if options.RemoteAddr == nil {
+-		return nil, fmt.Errorf("easytier: TCP connect is missing a remote address")
+-	}
+-	network := tcpNetwork(options.Bind)
+-	return s.Dialer.DialContext(ctx, network, options.RemoteAddr.String())
+-}
+-
+-func (s SocketFactory) BindUDP(ctx context.Context, options platform.UDPBindOptions) (net.PacketConn, error) {
+-	network, address := udpBind(options)
+-	return s.Dialer.ListenPacket(ctx, network, address, netip.AddrPort{})
+-}
+-
+-func (s SocketFactory) ListenTCP(ctx context.Context, options platform.TCPListenOptions) (net.Listener, error) {
+-	if options.Bind.Context.NetNS != nil {
+-		return nil, fmt.Errorf("easytier: network namespaces are not supported")
+-	}
+-	address := ":0"
+-	if options.Bind.LocalAddr != nil {
+-		address = options.Bind.LocalAddr.String()
+-	}
+-	network := tcpNetwork(options.Bind)
+-	reuse := options.Bind.ReusePort || options.Bind.ReuseAddr != nil && *options.Bind.ReuseAddr
+-	listenOpts := []dialer.Option{dialer.WithAddrReuse(reuse)}
+-	if direct, ok := s.Dialer.(dialer.Dialer); ok {
+-		return dialer.Listen(ctx, network, address, append(listenOpts, dialer.WithOption(direct.Opt))...)
+-	}
+-	if externalTCPListen(options.Purpose) {
+-		return nil, fmt.Errorf("easytier: TCP listeners are unavailable through a proxy or custom dialer")
+-	}
+-	// ProxyNAT, port leases, and hole-punch reservations must bind on the host
+-	// even when peer traffic uses dialer-proxy.
+-	return dialer.Listen(ctx, network, address, listenOpts...)
+-}
+-
+-func externalTCPListen(purpose platform.TCPListenPurpose) bool {
+-	switch purpose {
+-	case platform.TCPListenDirect, platform.TCPListenManual:
+-		return true
+-	default:
+-		return false
+-	}
+-}
+-
+-func tcpNetwork(options platform.TCPBindOptions) string {
+-	if options.LocalAddr != nil && options.LocalAddr.IP.To4() != nil {
+-		return "tcp4"
+-	}
+-	if options.OnlyV6 || options.Context.IPVersion == platform.IPVersionV6 {
+-		return "tcp6"
+-	}
+-	if options.Context.IPVersion == platform.IPVersionV4 {
+-		return "tcp4"
+-	}
+-	return "tcp"
+-}
+-
+-func udpBind(options platform.UDPBindOptions) (network, address string) {
+-	if options.LocalAddr != nil {
+-		address = options.LocalAddr.String()
+-		if options.LocalAddr.IP.To4() != nil {
+-			return "udp4", address
+-		}
+-		if len(options.LocalAddr.IP) != 0 {
+-			if options.OnlyV6 || options.LocalAddr.IP.To16() != nil && options.LocalAddr.IP.To4() == nil {
+-				return "udp6", address
+-			}
+-			return "udp", address
+-		}
+-		if options.OnlyV6 || options.Context.IPVersion == platform.IPVersionV6 {
+-			return "udp6", address
+-		}
+-		if options.Context.IPVersion == platform.IPVersionV4 {
+-			return "udp4", address
+-		}
+-		return "udp", address
+-	}
+-	switch {
+-	case options.OnlyV6 || options.Context.IPVersion == platform.IPVersionV6:
+-		return "udp6", "[::]:0"
+-	case options.Context.IPVersion == platform.IPVersionV4:
+-		return "udp4", "0.0.0.0:0"
+-	default:
+-		return "udp", ":0"
+-	}
+-}
+-
+-// DNSResolver resolves EasyTier control-plane names through the proxy-server resolver.
+-type DNSResolver struct{}
+-
+-func (DNSResolver) LookupIP(ctx context.Context, query platform.DNSQuery) ([]netip.Addr, error) {
+-	if address, err := netip.ParseAddr(query.Host); err == nil {
+-		return []netip.Addr{address.Unmap()}, nil
+-	}
+-	switch query.IPVersion {
+-	case 4:
+-		return resolver.LookupIPv4WithResolver(ctx, query.Host, resolver.ProxyServerHostResolver)
+-	case 6:
+-		return resolver.LookupIPv6WithResolver(ctx, query.Host, resolver.ProxyServerHostResolver)
+-	default:
+-		return resolver.LookupIPWithResolver(ctx, query.Host, resolver.ProxyServerHostResolver)
+-	}
+-}
+-
+-func exchangeDNS(ctx context.Context, host string, qtype uint16) (*D.Msg, error) {
+-	r := resolver.ProxyServerHostResolver
+-	if r == nil || !r.Invalid() {
+-		r = resolver.SystemResolver
+-	}
+-	if r == nil {
+-		return nil, fmt.Errorf("easytier: DNS resolver is unavailable")
+-	}
+-	request := new(D.Msg)
+-	request.SetQuestion(D.Fqdn(host), qtype)
+-	reply, err := r.ExchangeContext(ctx, request)
+-	if err != nil {
+-		return nil, err
+-	}
+-	if reply == nil {
+-		return nil, fmt.Errorf("easytier: empty DNS response for %q", host)
+-	}
+-	if reply.Rcode != D.RcodeSuccess {
+-		return nil, fmt.Errorf("easytier: DNS query for %q returned %s", host, D.RcodeToString[reply.Rcode])
+-	}
+-	return reply, nil
+-}
+-
+-func (DNSResolver) LookupTXT(ctx context.Context, query platform.DNSQuery) (string, error) {
+-	reply, err := exchangeDNS(ctx, query.Host, D.TypeTXT)
+-	if err != nil {
+-		return "", err
+-	}
+-	for _, answer := range reply.Answer {
+-		if txt, ok := answer.(*D.TXT); ok {
+-			return strings.Join(txt.Txt, ""), nil
+-		}
+-	}
+-	return "", fmt.Errorf("easytier: DNS TXT query for %q returned no records", query.Host)
+-}
+-
+-func (DNSResolver) LookupSRV(ctx context.Context, query platform.DNSQuery) ([]*net.SRV, error) {
+-	reply, err := exchangeDNS(ctx, query.Host, D.TypeSRV)
+-	if err != nil {
+-		return nil, err
+-	}
+-	var records []*net.SRV
+-	for _, answer := range reply.Answer {
+-		if srv, ok := answer.(*D.SRV); ok {
+-			records = append(records, &net.SRV{Target: srv.Target, Port: srv.Port, Priority: srv.Priority, Weight: srv.Weight})
+-		}
+-	}
+-	if len(records) == 0 {
+-		return nil, fmt.Errorf("easytier: DNS SRV query for %q returned no records", query.Host)
+-	}
+-	return records, nil
+-}
+-
+-// ConnectorEnvironment reports the local address used toward a remote UDP peer.
+-type ConnectorEnvironment struct {
+-	Dialer C.Dialer
+-}
+-
+-func (e ConnectorEnvironment) LocalAddrForRemote(ctx context.Context, remote *net.UDPAddr, _ platform.SocketContext) (net.Addr, error) {
+-	if remote == nil {
+-		return nil, fmt.Errorf("easytier: missing remote address")
+-	}
+-	network := "udp"
+-	if remote.IP.To4() != nil {
+-		network = "udp4"
+-	} else if remote.IP.To16() != nil {
+-		network = "udp6"
+-	}
+-	conn, err := e.Dialer.DialContext(ctx, network, remote.String())
+-	if err != nil {
+-		return nil, err
+-	}
+-	defer conn.Close()
+-	return conn.LocalAddr(), nil
+-}
+--- a/component/easytier/platform_test.go
++++ /dev/null
+@@ -1,98 +0,0 @@
+-package easytier
+-
+-import (
+-	"context"
+-	"errors"
+-	"net"
+-	"net/netip"
+-	"testing"
+-	"time"
+-
+-	"github.com/metacubex/mihomo/component/resolver"
+-
+-	"github.com/easytier/easytier/easytier-go/platform"
+-	D "github.com/miekg/dns"
+-)
+-
+-type testDNSResolver struct {
+-	resolver.Resolver
+-	exchange func(context.Context, *D.Msg) (*D.Msg, error)
+-}
+-
+-func (*testDNSResolver) Invalid() bool { return true }
+-
+-func (r *testDNSResolver) ExchangeContext(ctx context.Context, m *D.Msg) (*D.Msg, error) {
+-	return r.exchange(ctx, m)
+-}
+-
+-func TestDNSRecordsUseMihomoResolver(t *testing.T) {
+-	oldProxy, oldDefault := resolver.ProxyServerHostResolver, net.DefaultResolver
+-	t.Cleanup(func() {
+-		resolver.ProxyServerHostResolver = oldProxy
+-		net.DefaultResolver = oldDefault
+-	})
+-	net.DefaultResolver = &net.Resolver{
+-		PreferGo: true,
+-		Dial: func(context.Context, string, string) (net.Conn, error) {
+-			t.Error("net.DefaultResolver was used")
+-			return nil, errors.New("forbidden resolver")
+-		},
+-	}
+-	resolver.ProxyServerHostResolver = &testDNSResolver{exchange: func(_ context.Context, m *D.Msg) (*D.Msg, error) {
+-		reply := new(D.Msg).SetReply(m)
+-		switch m.Question[0].Qtype {
+-		case D.TypeTXT:
+-			reply.Answer = []D.RR{&D.TXT{Txt: []string{"ok"}}}
+-		case D.TypeSRV:
+-			reply.Answer = []D.RR{&D.SRV{Target: "peer.example.", Port: 11010}}
+-		}
+-		return reply, nil
+-	}}
+-
+-	txt, err := (DNSResolver{}).LookupTXT(context.Background(), platform.DNSQuery{Host: "example"})
+-	if err != nil || txt != "ok" {
+-		t.Fatalf("TXT: %q %v", txt, err)
+-	}
+-	srv, err := (DNSResolver{}).LookupSRV(context.Background(), platform.DNSQuery{Host: "example"})
+-	if err != nil || len(srv) != 1 || srv[0].Target != "peer.example." || srv[0].Port != 11010 {
+-		t.Fatalf("SRV: %v %v", srv, err)
+-	}
+-}
+-
+-func TestUDPBindPreservesWildcardPort(t *testing.T) {
+-	_, address := udpBind(platform.UDPBindOptions{LocalAddr: &net.UDPAddr{Port: 45678}})
+-	_, port, err := net.SplitHostPort(address)
+-	if err != nil || port != "45678" {
+-		t.Fatalf("%s: %v", address, err)
+-	}
+-}
+-
+-type forbiddenDialer struct{}
+-
+-func (forbiddenDialer) DialContext(context.Context, string, string) (net.Conn, error) {
+-	panic("unexpected proxy session")
+-}
+-
+-func (forbiddenDialer) ListenPacket(context.Context, string, string, netip.AddrPort) (net.PacketConn, error) {
+-	panic("unexpected proxy socket")
+-}
+-
+-func TestListenTCPInternalAllowedThroughProxyDialer(t *testing.T) {
+-	factory := SocketFactory{Dialer: forbiddenDialer{}}
+-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+-	defer cancel()
+-	listener, err := factory.ListenTCP(ctx, platform.TCPListenOptions{
+-		Bind:    platform.TCPBindOptions{LocalAddr: &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)}},
+-		Purpose: platform.TCPListenProxyNAT,
+-	})
+-	if err != nil {
+-		t.Fatal(err)
+-	}
+-	defer listener.Close()
+-	if _, err := factory.ListenTCP(ctx, platform.TCPListenOptions{
+-		Bind:    platform.TCPBindOptions{LocalAddr: &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)}},
+-		Purpose: platform.TCPListenDirect,
+-	}); err == nil {
+-		t.Fatal("external listener through proxy must fail")
+-	}
+-}
+--- a/component/easytier/toml.go
++++ /dev/null
+@@ -1,377 +0,0 @@
+-package easytier
+-
+-import (
+-	"encoding/json"
+-	"fmt"
+-	"net/url"
+-	"strings"
+-)
+-
+-const defaultListener = "tcp://0.0.0.0:11010"
+-
+-type requiredFlag struct {
+-	key   string
+-	value string
+-}
+-
+-// Config is the structured EasyTier outbound configuration rendered to TOML.
+-type Config struct {
+-	NetworkName         string
+-	NetworkSecret       string
+-	Hostname            string
+-	IPv4                string
+-	DHCP                bool
+-	Peers               []string
+-	Listeners           []string
+-	NoListener          *bool
+-	MappedListeners     []string
+-	ExitNodes           []string
+-	ProxyNetworks       []string
+-	InstanceName        string
+-	AcceptDNS           *bool
+-	EnableExitNode      *bool
+-	EnableEncryption    *bool
+-	EncryptionAlgorithm string
+-	PrivateMode         *bool
+-	LatencyFirst        *bool
+-	DisableP2P          *bool
+-	EnableKCPProxy      *bool
+-	DisableKCPInput     *bool
+-	EnableQUICProxy     *bool
+-	DisableQUICInput    *bool
+-	MTU                 int
+-	TLDDNSZone          string
+-	SecureMode          *bool
+-	LocalPrivateKey     string
+-	LocalPublicKey      string
+-}
+-
+-// Peer is one EasyTier [[peer]] table after URI query parameters are extracted.
+-type Peer struct {
+-	URI           string
+-	PeerPublicKey string
+-}
+-
+-func (c Config) listeners() []string {
+-	if c.NoListener != nil && *c.NoListener {
+-		return []string{}
+-	}
+-	if len(c.Listeners) > 0 {
+-		return c.Listeners
+-	}
+-	if c.NoListener != nil && !*c.NoListener {
+-		return []string{defaultListener}
+-	}
+-	return []string{}
+-}
+-
+-// ValidateStructured checks structured fields before rendering TOML.
+-func (c Config) ValidateStructured() error {
+-	if strings.TrimSpace(c.NetworkName) == "" {
+-		return fmt.Errorf("easytier: network-name is required")
+-	}
+-	if c.NoListener != nil && *c.NoListener && len(c.Listeners) > 0 {
+-		return fmt.Errorf("easytier: no-listener cannot be combined with listeners")
+-	}
+-	if len(c.Peers) == 0 && len(c.listeners()) == 0 {
+-		return fmt.Errorf("easytier: peers is required when listeners are empty; implicit public.easytier.top is disabled")
+-	}
+-	if _, err := c.parsedPeers(); err != nil {
+-		return err
+-	}
+-	if c.LocalPublicKey != "" && c.LocalPrivateKey == "" {
+-		return fmt.Errorf("easytier: local-public-key requires local-private-key")
+-	}
+-	if c.SecureMode != nil && !*c.SecureMode && c.hasSecureModeMaterial() {
+-		return fmt.Errorf("easytier: local keys and peer-public-key require secure-mode")
+-	}
+-	return nil
+-}
+-
+-func (c Config) parsedPeers() ([]Peer, error) {
+-	out := make([]Peer, 0, len(c.Peers))
+-	for i, raw := range c.Peers {
+-		peer, err := parsePeerURI(raw)
+-		if err != nil {
+-			return nil, fmt.Errorf("easytier: peers[%d]: %w", i, err)
+-		}
+-		out = append(out, peer)
+-	}
+-	return out, nil
+-}
+-
+-func parsePeerURI(raw string) (Peer, error) {
+-	raw = strings.TrimSpace(raw)
+-	if raw == "" {
+-		return Peer{}, fmt.Errorf("uri is required")
+-	}
+-	u, err := url.Parse(raw)
+-	if err != nil {
+-		return Peer{}, fmt.Errorf("invalid uri: %w", err)
+-	}
+-	if u.RawQuery == "" {
+-		return Peer{URI: raw}, nil
+-	}
+-	kept := make([]string, 0)
+-	key := ""
+-	stripped := false
+-	for _, pair := range strings.Split(u.RawQuery, "&") {
+-		if pair == "" {
+-			continue
+-		}
+-		name, value, _ := strings.Cut(pair, "=")
+-		decodedName, err := url.PathUnescape(name)
+-		if err != nil {
+-			return Peer{}, fmt.Errorf("invalid uri query: %w", err)
+-		}
+-		switch decodedName {
+-		case "peer-public-key", "peer_public_key":
+-			decodedValue, err := url.PathUnescape(value)
+-			if err != nil {
+-				return Peer{}, fmt.Errorf("invalid peer-public-key: %w", err)
+-			}
+-			key = decodedValue
+-			stripped = true
+-		default:
+-			kept = append(kept, pair)
+-		}
+-	}
+-	if !stripped {
+-		return Peer{URI: raw}, nil
+-	}
+-	u.RawQuery = strings.Join(kept, "&")
+-	return Peer{URI: u.String(), PeerPublicKey: key}, nil
+-}
+-
+-func (c Config) hasSecureModeMaterial() bool {
+-	if c.LocalPrivateKey != "" || c.LocalPublicKey != "" {
+-		return true
+-	}
+-	peers, err := c.parsedPeers()
+-	if err != nil {
+-		return false
+-	}
+-	for _, peer := range peers {
+-		if peer.PeerPublicKey != "" {
+-			return true
+-		}
+-	}
+-	return false
+-}
+-
+-func (c Config) secureModeEnabled() bool {
+-	if c.SecureMode != nil {
+-		return *c.SecureMode
+-	}
+-	return c.hasSecureModeMaterial()
+-}
+-
+-// RenderTOML converts structured fields to EasyTier TOML.
+-func (c Config) RenderTOML() (string, error) {
+-	if err := c.ValidateStructured(); err != nil {
+-		return "", err
+-	}
+-	var encoded strings.Builder
+-	if c.InstanceName != "" {
+-		writeTOMLStringField(&encoded, "instance_name", c.InstanceName)
+-	}
+-	if c.Hostname != "" {
+-		writeTOMLStringField(&encoded, "hostname", c.Hostname)
+-	}
+-	if strings.TrimSpace(c.IPv4) != "" {
+-		writeTOMLStringField(&encoded, "ipv4", c.IPv4)
+-	}
+-	if c.DHCP || strings.TrimSpace(c.IPv4) == "" {
+-		writeTOMLBoolField(&encoded, "dhcp", true)
+-	}
+-	writeTOMLStringArrayField(&encoded, "listeners", c.listeners())
+-	if len(c.MappedListeners) > 0 {
+-		writeTOMLStringArrayField(&encoded, "mapped_listeners", c.MappedListeners)
+-	}
+-	if len(c.ExitNodes) > 0 {
+-		writeTOMLStringArrayField(&encoded, "exit_nodes", c.ExitNodes)
+-	}
+-	encoded.WriteByte('\n')
+-	encoded.WriteString("[network_identity]\n")
+-	writeTOMLStringField(&encoded, "network_name", c.NetworkName)
+-	writeTOMLStringField(&encoded, "network_secret", c.NetworkSecret)
+-
+-	peers, err := c.parsedPeers()
+-	if err != nil {
+-		return "", err
+-	}
+-
+-	if c.secureModeEnabled() {
+-		encoded.WriteString("\n[secure_mode]\n")
+-		writeTOMLBoolField(&encoded, "enabled", true)
+-		if c.LocalPrivateKey != "" {
+-			writeTOMLStringField(&encoded, "local_private_key", c.LocalPrivateKey)
+-		}
+-		if c.LocalPublicKey != "" {
+-			writeTOMLStringField(&encoded, "local_public_key", c.LocalPublicKey)
+-		}
+-	}
+-
+-	for _, peer := range peers {
+-		encoded.WriteString("\n[[peer]]\n")
+-		writeTOMLStringField(&encoded, "uri", peer.URI)
+-		if peer.PeerPublicKey != "" {
+-			writeTOMLStringField(&encoded, "peer_public_key", peer.PeerPublicKey)
+-		}
+-	}
+-	for _, network := range c.ProxyNetworks {
+-		encoded.WriteString("\n[[proxy_network]]\n")
+-		writeTOMLStringField(&encoded, "cidr", network)
+-	}
+-
+-	encoded.WriteString("\n[flags]\n")
+-	writeTOMLBoolField(&encoded, "no_tun", true)
+-	writeTOMLBoolField(&encoded, "bind_device", false)
+-	writeOptionalBoolField(&encoded, "accept_dns", c.AcceptDNS)
+-	writeOptionalBoolField(&encoded, "enable_exit_node", c.EnableExitNode)
+-	writeOptionalBoolField(&encoded, "enable_encryption", c.EnableEncryption)
+-	if c.EncryptionAlgorithm != "" {
+-		writeTOMLStringField(&encoded, "encryption_algorithm", c.EncryptionAlgorithm)
+-	}
+-	writeOptionalBoolField(&encoded, "private_mode", c.PrivateMode)
+-	writeOptionalBoolField(&encoded, "latency_first", c.LatencyFirst)
+-	writeOptionalBoolField(&encoded, "disable_p2p", c.DisableP2P)
+-	writeOptionalBoolField(&encoded, "enable_kcp_proxy", c.EnableKCPProxy)
+-	writeOptionalBoolField(&encoded, "disable_kcp_input", c.DisableKCPInput)
+-	writeOptionalBoolField(&encoded, "enable_quic_proxy", c.EnableQUICProxy)
+-	writeOptionalBoolField(&encoded, "disable_quic_input", c.DisableQUICInput)
+-	if c.MTU > 0 {
+-		fmt.Fprintf(&encoded, "mtu = %d\n", c.MTU)
+-	}
+-	if c.TLDDNSZone != "" {
+-		writeTOMLStringField(&encoded, "tld_dns_zone", c.TLDDNSZone)
+-	}
+-	return encoded.String(), nil
+-}
+-
+-func requiredFlags() []requiredFlag {
+-	return []requiredFlag{
+-		{key: "no_tun", value: "true"},
+-		{key: "bind_device", value: "false"},
+-	}
+-}
+-
+-// ApplyRequiredFlags forces no_tun and bind_device=false.
+-func ApplyRequiredFlags(configTOML string) string {
+-	flags := requiredFlags()
+-	required := make(map[string]string, len(flags))
+-	for _, flag := range flags {
+-		required[flag.key] = flag.value
+-	}
+-	lines := strings.Split(configTOML, "\n")
+-	var out []string
+-	section := ""
+-	seen := map[string]bool{}
+-	wroteFlags := false
+-	flushFlags := func() {
+-		if section != "flags" {
+-			return
+-		}
+-		for _, flag := range flags {
+-			if !seen[flag.key] {
+-				out = append(out, flag.key+" = "+flag.value)
+-			}
+-		}
+-		wroteFlags = true
+-		seen = map[string]bool{}
+-	}
+-	for _, line := range lines {
+-		trimmed := strings.TrimSpace(line)
+-		if isTOMLSection(trimmed) {
+-			flushFlags()
+-			section = sectionName(trimmed)
+-			out = append(out, line)
+-			continue
+-		}
+-		if section == "flags" {
+-			key := flagKey(trimmed)
+-			if value, ok := required[key]; ok {
+-				out = append(out, key+" = "+value)
+-				seen[key] = true
+-				continue
+-			}
+-		}
+-		out = append(out, line)
+-	}
+-	flushFlags()
+-	if !wroteFlags {
+-		if len(out) > 0 && strings.TrimSpace(out[len(out)-1]) != "" {
+-			out = append(out, "")
+-		}
+-		out = append(out, "[flags]")
+-		for _, flag := range flags {
+-			out = append(out, flag.key+" = "+flag.value)
+-		}
+-	}
+-	return strings.TrimSpace(strings.Join(out, "\n")) + "\n"
+-}
+-
+-func isTOMLSection(trimmed string) bool {
+-	if !strings.HasPrefix(trimmed, "[") {
+-		return false
+-	}
+-	end := strings.IndexByte(trimmed, ']')
+-	if end < 0 {
+-		return false
+-	}
+-	rest := strings.TrimSpace(trimmed[end+1:])
+-	return rest == "" || strings.HasPrefix(rest, "#")
+-}
+-
+-func sectionName(trimmed string) string {
+-	end := strings.IndexByte(trimmed, ']')
+-	if end < 0 {
+-		return ""
+-	}
+-	name := strings.TrimSpace(trimmed[:end+1])
+-	name = strings.TrimPrefix(name, "[[")
+-	name = strings.TrimPrefix(name, "[")
+-	name = strings.TrimSuffix(name, "]]")
+-	name = strings.TrimSuffix(name, "]")
+-	return strings.Trim(name, `"'`)
+-}
+-
+-func flagKey(trimmed string) string {
+-	if idx := strings.IndexByte(trimmed, '='); idx >= 0 {
+-		return strings.Trim(strings.TrimSpace(trimmed[:idx]), `"'`)
+-	}
+-	return ""
+-}
+-
+-func writeOptionalBoolField(encoded *strings.Builder, name string, value *bool) {
+-	if value != nil {
+-		writeTOMLBoolField(encoded, name, *value)
+-	}
+-}
+-
+-func writeTOMLStringField(encoded *strings.Builder, name string, value string) {
+-	fmt.Fprintf(encoded, "%s = %s\n", name, quoteTOMLString(value))
+-}
+-
+-func writeTOMLBoolField(encoded *strings.Builder, name string, value bool) {
+-	fmt.Fprintf(encoded, "%s = %t\n", name, value)
+-}
+-
+-func writeTOMLStringArrayField(encoded *strings.Builder, name string, values []string) {
+-	fmt.Fprintf(encoded, "%s = [", name)
+-	for index, value := range values {
+-		if index != 0 {
+-			encoded.WriteString(", ")
+-		}
+-		encoded.WriteString(quoteTOMLString(value))
+-	}
+-	encoded.WriteString("]\n")
+-}
+-
+-func quoteTOMLString(value string) string {
+-	encoded, err := json.Marshal(value)
+-	if err != nil {
+-		panic("encoding a validated Go string as JSON cannot fail")
+-	}
+-	return string(encoded)
+-}
+--- a/component/easytier/toml_test.go
++++ /dev/null
+@@ -1,301 +0,0 @@
+-package easytier
+-
+-import (
+-	"strings"
+-	"testing"
+-)
+-
+-func boolPtr(v bool) *bool { return &v }
+-
+-func peers(uris ...string) []string { return uris }
+-
+-func TestRenderTOMLDefaultNoListenerRequiresPeers(t *testing.T) {
+-	_, err := Config{NetworkName: "example"}.RenderTOML()
+-	if err == nil {
+-		t.Fatal("expected missing peers to fail")
+-	}
+-}
+-
+-func TestRenderTOMLNoListenerFalseDefaultListener(t *testing.T) {
+-	toml, err := Config{
+-		NetworkName: "example",
+-		NoListener:  boolPtr(false),
+-	}.RenderTOML()
+-	if err != nil {
+-		t.Fatal(err)
+-	}
+-	if !strings.Contains(toml, `listeners = ["tcp://0.0.0.0:11010"]`) {
+-		t.Fatalf("missing default listener:\n%s", toml)
+-	}
+-	if !strings.Contains(toml, "no_tun = true") || !strings.Contains(toml, "bind_device = false") {
+-		t.Fatalf("missing required flags:\n%s", toml)
+-	}
+-}
+-
+-func TestRenderTOMLExplicitEmptyListenersWithPeers(t *testing.T) {
+-	toml, err := Config{
+-		NetworkName:   "example",
+-		NetworkSecret: "secret",
+-		Peers:         peers("tcp://192.0.2.10:11010"),
+-		Hostname:      "node-a",
+-		IPv4:          "10.144.0.1/24",
+-	}.RenderTOML()
+-	if err != nil {
+-		t.Fatal(err)
+-	}
+-	if !strings.Contains(toml, "listeners = []") {
+-		t.Fatalf("expected empty listeners:\n%s", toml)
+-	}
+-	if !strings.Contains(toml, "[[peer]]") || !strings.Contains(toml, `uri = "tcp://192.0.2.10:11010"`) {
+-		t.Fatalf("missing peer:\n%s", toml)
+-	}
+-}
+-
+-func TestApplyRequiredFlagsInjectsNoTun(t *testing.T) {
+-	got := ApplyRequiredFlags("[network_identity]\nnetwork_name = \"n\"\n")
+-	if !strings.Contains(got, "[flags]") || !strings.Contains(got, "no_tun = true") {
+-		t.Fatalf("did not inject no_tun:\n%s", got)
+-	}
+-	if !strings.Contains(got, "bind_device = false") {
+-		t.Fatalf("missing bind_device:\n%s", got)
+-	}
+-}
+-
+-func TestApplyRequiredFlagsReplacesNoTun(t *testing.T) {
+-	got := ApplyRequiredFlags("[flags]\nno_tun = false\nmtu = 1200\n")
+-	if !strings.Contains(got, "no_tun = true") {
+-		t.Fatalf("did not replace no_tun:\n%s", got)
+-	}
+-	if !strings.Contains(got, "bind_device = false") {
+-		t.Fatalf("missing bind_device:\n%s", got)
+-	}
+-	if !strings.Contains(got, "mtu = 1200") {
+-		t.Fatalf("lost existing flag:\n%s", got)
+-	}
+-}
+-
+-func TestNoListenerConflict(t *testing.T) {
+-	err := Config{
+-		NetworkName: "example",
+-		NoListener:  boolPtr(true),
+-		Listeners:   []string{"tcp://0.0.0.0:11010"},
+-	}.ValidateStructured()
+-	if err == nil {
+-		t.Fatal("expected conflict")
+-	}
+-}
+-
+-func TestRenderTOMLManualIPv4WithoutPrefix(t *testing.T) {
+-	toml, err := Config{
+-		NetworkName:   "example",
+-		NetworkSecret: "example",
+-		IPv4:          "10.144.0.10",
+-		Peers:         peers("tcp://192.0.2.10:11010"),
+-	}.RenderTOML()
+-	if err != nil {
+-		t.Fatal(err)
+-	}
+-	if !strings.Contains(toml, `ipv4 = "10.144.0.10"`) {
+-		t.Fatalf("missing manual ipv4:\n%s", toml)
+-	}
+-	if !strings.Contains(toml, `uri = "tcp://192.0.2.10:11010"`) {
+-		t.Fatalf("missing peer:\n%s", toml)
+-	}
+-}
+-
+-func TestRenderTOMLMultiplePeers(t *testing.T) {
+-	toml, err := Config{
+-		NetworkName:   "example",
+-		NetworkSecret: "secret",
+-		Peers: peers(
+-			"tcp://192.0.2.10:11010",
+-			"udp://192.0.2.11:11010",
+-		),
+-	}.RenderTOML()
+-	if err != nil {
+-		t.Fatal(err)
+-	}
+-	if strings.Count(toml, "[[peer]]") != 2 {
+-		t.Fatalf("want 2 peer tables:\n%s", toml)
+-	}
+-	if !strings.Contains(toml, `uri = "tcp://192.0.2.10:11010"`) || !strings.Contains(toml, `uri = "udp://192.0.2.11:11010"`) {
+-		t.Fatalf("missing peer uris:\n%s", toml)
+-	}
+-}
+-
+-func TestApplyRequiredFlagsSectionComment(t *testing.T) {
+-	got := ApplyRequiredFlags("[flags] # tun flags\nno_tun = false\nmtu = 1200\n")
+-	if strings.Count(got, "[flags]") != 1 {
+-		t.Fatalf("duplicate flags table:\n%s", got)
+-	}
+-	if !strings.Contains(got, "no_tun = true") || !strings.Contains(got, "mtu = 1200") {
+-		t.Fatalf("did not rewrite flags:\n%s", got)
+-	}
+-}
+-
+-func TestApplyRequiredFlagsQuotedKey(t *testing.T) {
+-	got := ApplyRequiredFlags("[flags]\n\"no_tun\" = false\n")
+-	if strings.Count(got, "no_tun") != 1 {
+-		t.Fatalf("duplicate no_tun:\n%s", got)
+-	}
+-	if !strings.Contains(got, "no_tun = true") {
+-		t.Fatalf("did not replace quoted no_tun:\n%s", got)
+-	}
+-}
+-
+-func TestRenderTOMLDefaultsDHCPWhenIPv4Omitted(t *testing.T) {
+-	toml, err := Config{
+-		NetworkName:   "example",
+-		NetworkSecret: "secret",
+-		Peers:         peers("tcp://192.0.2.10:11010"),
+-	}.RenderTOML()
+-	if err != nil {
+-		t.Fatal(err)
+-	}
+-	if !strings.Contains(toml, "dhcp = true") {
+-		t.Fatalf("expected default dhcp:\n%s", toml)
+-	}
+-	if strings.Contains(toml, "ipv4") {
+-		t.Fatalf("did not expect static ipv4:\n%s", toml)
+-	}
+-}
+-
+-func TestRenderTOMLStaticIPv4OmitsDHCP(t *testing.T) {
+-	toml, err := Config{
+-		NetworkName:   "example",
+-		NetworkSecret: "secret",
+-		IPv4:          "10.144.0.10",
+-		Peers:         peers("tcp://192.0.2.10:11010"),
+-	}.RenderTOML()
+-	if err != nil {
+-		t.Fatal(err)
+-	}
+-	if strings.Contains(toml, "dhcp = true") {
+-		t.Fatalf("did not expect dhcp with static ipv4:\n%s", toml)
+-	}
+-}
+-
+-func TestRenderTOMLWritesTLDDNSZone(t *testing.T) {
+-	toml, err := Config{
+-		NetworkName:   "example",
+-		NetworkSecret: "secret",
+-		Peers:         peers("tcp://192.0.2.10:11010"),
+-		TLDDNSZone:    "overlay.example.",
+-	}.RenderTOML()
+-	if err != nil {
+-		t.Fatal(err)
+-	}
+-	if !strings.Contains(toml, `tld_dns_zone = "overlay.example."`) {
+-		t.Fatalf("missing tld_dns_zone:\n%s", toml)
+-	}
+-}
+-
+-func TestRenderTOMLSecureMode(t *testing.T) {
+-	toml, err := Config{
+-		NetworkName:     "example",
+-		NetworkSecret:   "secret",
+-		Peers:           peers("tcp://192.0.2.10:11010"),
+-		SecureMode:      boolPtr(true),
+-		LocalPrivateKey: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+-		LocalPublicKey:  "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=",
+-	}.RenderTOML()
+-	if err != nil {
+-		t.Fatal(err)
+-	}
+-	if !strings.Contains(toml, "[secure_mode]") || !strings.Contains(toml, "enabled = true") {
+-		t.Fatalf("missing secure_mode:\n%s", toml)
+-	}
+-	if !strings.Contains(toml, `local_private_key = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="`) {
+-		t.Fatalf("missing local_private_key:\n%s", toml)
+-	}
+-	if !strings.Contains(toml, `local_public_key = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB="`) {
+-		t.Fatalf("missing local_public_key:\n%s", toml)
+-	}
+-}
+-
+-func TestRenderTOMLPeerPublicKeyEnablesSecureMode(t *testing.T) {
+-	toml, err := Config{
+-		NetworkName:   "example",
+-		NetworkSecret: "secret",
+-		Peers:         peers("tcp://relay.example.com:11010?peer-public-key=CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC="),
+-	}.RenderTOML()
+-	if err != nil {
+-		t.Fatal(err)
+-	}
+-	if !strings.Contains(toml, "[secure_mode]") || !strings.Contains(toml, "enabled = true") {
+-		t.Fatalf("pinning should enable secure_mode:\n%s", toml)
+-	}
+-	if !strings.Contains(toml, `uri = "tcp://relay.example.com:11010"`) {
+-		t.Fatalf("missing peer uri:\n%s", toml)
+-	}
+-	if strings.Contains(toml, "peer-public-key=") {
+-		t.Fatalf("peer-public-key should be stripped from uri:\n%s", toml)
+-	}
+-	if !strings.Contains(toml, `peer_public_key = "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC="`) {
+-		t.Fatalf("missing peer_public_key:\n%s", toml)
+-	}
+-}
+-
+-func TestRenderTOMLSecureModeFalseRejectsPinnedPeer(t *testing.T) {
+-	err := Config{
+-		NetworkName:   "example",
+-		NetworkSecret: "secret",
+-		SecureMode:    boolPtr(false),
+-		Peers:         peers("tcp://relay.example.com:11010?peer-public-key=CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC="),
+-	}.ValidateStructured()
+-	if err == nil {
+-		t.Fatal("expected pinned peer without secure-mode to fail")
+-	}
+-}
+-
+-func TestRenderTOMLLocalPublicKeyRequiresPrivateKey(t *testing.T) {
+-	err := Config{
+-		NetworkName:    "example",
+-		NetworkSecret:  "secret",
+-		Peers:          peers("tcp://192.0.2.10:11010"),
+-		LocalPublicKey: "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=",
+-	}.ValidateStructured()
+-	if err == nil {
+-		t.Fatal("expected local-public-key without private key to fail")
+-	}
+-}
+-
+-func TestRenderTOMLEmptyPeerURI(t *testing.T) {
+-	err := Config{
+-		NetworkName:   "example",
+-		NetworkSecret: "secret",
+-		Peers:         []string{""},
+-	}.ValidateStructured()
+-	if err == nil {
+-		t.Fatal("expected empty peer uri to fail")
+-	}
+-}
+-
+-func TestParsePeerURIQuery(t *testing.T) {
+-	peer, err := parsePeerURI(" tcp://relay.example.com:11010?foo=1&peer-public-key=CC%2BCC/CC=&bar=2 ")
+-	if err != nil {
+-		t.Fatal(err)
+-	}
+-	if peer.URI != "tcp://relay.example.com:11010?foo=1&bar=2" {
+-		t.Fatalf("uri: %q", peer.URI)
+-	}
+-	if peer.PeerPublicKey != "CC+CC/CC=" {
+-		t.Fatalf("key: %q", peer.PeerPublicKey)
+-	}
+-
+-	peer, err = parsePeerURI("tcp://relay.example.com:11010?peer_public_key=CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC=")
+-	if err != nil {
+-		t.Fatal(err)
+-	}
+-	if peer.URI != "tcp://relay.example.com:11010" || peer.PeerPublicKey == "" {
+-		t.Fatalf("snake_case: %+v", peer)
+-	}
+-
+-	peer, err = parsePeerURI("tcp://192.0.2.10:11010?foo=1")
+-	if err != nil {
+-		t.Fatal(err)
+-	}
+-	if peer.URI != "tcp://192.0.2.10:11010?foo=1" || peer.PeerPublicKey != "" {
+-		t.Fatalf("other query: %+v", peer)
+-	}
+-}
+--- a/constant/features/no_easytier.go
++++ /dev/null
+@@ -1,5 +0,0 @@
+-//go:build no_easytier
+-
+-package features
+-
+-const NoEasyTier = true
+--- a/constant/features/no_easytier_stub.go
++++ b/constant/features/no_easytier_stub.go
+@@ -1,5 +1,4 @@
+-//go:build !no_easytier
+-
+ package features
+ 
+-const NoEasyTier = false
++// Harbor excludes EasyTier until embedded-core source provenance is complete.
++const NoEasyTier = true
+--- a/go.mod
++++ b/go.mod
+@@ -6,7 +6,6 @@
+ 	github.com/bahlo/generic-list-go v0.2.0
+ 	github.com/coreos/go-iptables v0.8.0
+ 	github.com/dlclark/regexp2 v1.12.0
+-	github.com/easytier/easytier/easytier-go v0.0.0-20260910071355-3d0c9c3ca5e2
+ 	github.com/enfein/mieru/v3 v3.38.1
+ 	github.com/gobwas/ws v1.4.0
+ 	github.com/gofrs/uuid/v5 v5.4.0
+@@ -52,7 +51,6 @@
+ 	github.com/metacubex/zerotier-go v0.0.0-20260813124750-13fa6f45da5f
+ 	github.com/mroth/weightedrand/v2 v2.1.0
+ 	github.com/openacid/low v0.1.21
+-	github.com/rasky/go-lzo v0.0.0-20200203143853-96a758eda86e
+ 	github.com/samber/lo v1.53.0
+ 	github.com/sirupsen/logrus v1.9.4
+ 	github.com/stretchr/testify v1.12.1
+@@ -117,7 +115,6 @@
+ 	github.com/metacubex/nftables v0.0.0-20260426003805-208c2c1ba2cb // indirect
+ 	github.com/metacubex/qpack v0.6.0 // indirect
+ 	github.com/metacubex/tailscale-wireguard-go v0.0.0-20260725073821-e61ab99cede2 // indirect
+-	github.com/metacubex/wazero v0.0.0-20260628025728-9ae6bdcf2a7d // indirect
+ 	github.com/metacubex/yamux v0.0.0-20250918083631-dd5f17c0be49 // indirect
+ 	github.com/mitchellh/go-ps v1.0.0 // indirect
+ 	github.com/oasisprotocol/deoxysii v0.0.0-20220228165953-2091330c22b7 // indirect
+--- a/go.sum
++++ b/go.sum
+@@ -27,8 +27,6 @@
+ github.com/dlclark/regexp2 v1.12.0/go.mod h1:DHkYz0B9wPfa6wondMfaivmHpzrQ3v9q8cnmRbL6yW8=
+ github.com/dunglas/httpsfv v1.0.2 h1:iERDp/YAfnojSDJ7PW3dj1AReJz4MrwbECSSE59JWL0=
+ github.com/dunglas/httpsfv v1.0.2/go.mod h1:zID2mqw9mFsnt7YC3vYQ9/cjq30q41W+1AnDwH8TiMg=
+-github.com/easytier/easytier/easytier-go v0.0.0-20260910071355-3d0c9c3ca5e2 h1:2/9iRUcMR3QPrT2XFf/i7QV5YoSHPFjkgBM5tP8xbcc=
+-github.com/easytier/easytier/easytier-go v0.0.0-20260910071355-3d0c9c3ca5e2/go.mod h1:fCEi5+K2yt+sPDONSWO1uNpOifrwPgFGvm3J0YrFRvk=
+ github.com/enfein/mieru/v3 v3.38.1 h1:UZ5zAJi0caSmaOniVy33pyY7ANxyf4PmPeLSuYZpDro=
+ github.com/enfein/mieru/v3 v3.38.1/go.mod h1:zJBUCsi5rxyvHM8fjFf+GLaEl4OEjjBXr1s5F6Qd3hM=
+ github.com/ericlagergren/aegis v0.0.0-20250325060835-cd0defd64358 h1:kXYqH/sL8dS/FdoFjr12ePjnLPorPo2FsnrHNuXSDyo=
+@@ -183,8 +181,6 @@
+ github.com/metacubex/tls v0.1.9/go.mod h1:0XeVdL0cBw+8i5Hqy3lVeP9IyD/LFTq02ExvHM6rzEM=
+ github.com/metacubex/utls v1.8.8 h1:7fiMYahL+tT1I/vG1MWidv88r/3A5NnPrurjzApZGyQ=
+ github.com/metacubex/utls v1.8.8/go.mod h1:kncGGVhFaoGn5M3pFe3SXhZCzsbCJayNOH4UEqTKTko=
+-github.com/metacubex/wazero v0.0.0-20260628025728-9ae6bdcf2a7d h1:UMFI+kdp0jA8s9tC7oul0pWeTW6s8lnm0dD5PT+RY14=
+-github.com/metacubex/wazero v0.0.0-20260628025728-9ae6bdcf2a7d/go.mod h1:p48xp436h1oGfoXuEnVONeDhTW+E2UpY94GAVxA62oI=
+ github.com/metacubex/wireguard-go v0.0.0-20250820062549-a6cecdd7f57f h1:FGBPRb1zUabhPhDrlKEjQ9lgIwQ6cHL4x8M9lrERhbk=
+ github.com/metacubex/wireguard-go v0.0.0-20250820062549-a6cecdd7f57f/go.mod h1:oPGcV994OGJedmmxrcK9+ni7jUEMGhR+uVQAdaduIP4=
+ github.com/metacubex/yamux v0.0.0-20250918083631-dd5f17c0be49 h1:lhlqpYHopuTLx9xQt22kSA9HtnyTDmk5XjjQVCGHe2E=
+@@ -214,8 +210,6 @@
+ github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
+ github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
+ github.com/prashantv/gostub v1.1.0 h1:BTyx3RfQjRHnUWaGF9oQos79AlQ5k8WNktv7VGvVH4g=
+-github.com/rasky/go-lzo v0.0.0-20200203143853-96a758eda86e h1:dCWirM5F3wMY+cmRda/B1BiPsFtmzXqV9b0hLWtVBMs=
+-github.com/rasky/go-lzo v0.0.0-20200203143853-96a758eda86e/go.mod h1:9leZcVcItj6m9/CfHY5Em/iBrCz7js8LcRQGTKEEv2M=
+ github.com/rogpeppe/go-internal v1.12.0 h1:exVL4IDcn6na9z1rAb56Vxr+CgyK3nn3O+epU5NdKM8=
+ github.com/safchain/ethtool v0.3.0 h1:gimQJpsI6sc1yIqP/y8GYgiXn/NjgvpM0RNoWLVVmP0=
+ github.com/safchain/ethtool v0.3.0/go.mod h1:SA9BwrgyAqNo7M+uaL6IYbxpm5wk3L7Mm6ocLW+CJUs=
+--- /dev/null
++++ b/transport/openvpn/harbor_lzo_test.go
+@@ -0,0 +1,19 @@
++package openvpn
++
++import "testing"
++
++func TestHarborRejectsLZOCompressed(t *testing.T) {
++	for _, input := range [][]byte{{0x66}, {0x66, 1, 2, 3}, {}, {0x00, 1}} {
++		out, err := lzo1xDecompressSafe(input)
++		if err == nil || out != nil {
++			t.Fatalf("unsupported input accepted: %x", input)
++		}
++	}
++}
++
++func TestHarborRetainsUncompressedLZOFrame(t *testing.T) {
++	out, err := lzo1xDecompressSafe([]byte{0xfa, 1, 2, 3})
++	if err != nil || len(out) != 3 || out[0] != 1 || out[2] != 3 {
++		t.Fatal("uncompressed frame changed")
++	}
++}
+--- a/transport/openvpn/lzo.go
++++ b/transport/openvpn/lzo.go
+@@ -1,10 +1,7 @@
+ package openvpn
+ 
+ import (
+-	"bytes"
+ 	"errors"
+-
+-	"github.com/rasky/go-lzo"
+ )
+ 
+ const (
+@@ -28,15 +25,9 @@
+ 		}
+ 		return nil, nil
+ 	case lzoCompressLZO:
+-		if len(src) > 1 {
+-			r := bytes.NewReader(src[1:])
+-			out, err := lzo.Decompress1X(r, len(src)-1, 0)
+-			if err != nil {
+-				return nil, ErrLZODecompress
+-			}
+-			return out, nil
+-		}
+-		return nil, nil
++		// Harbor does not ship the GPLv2-only LZO implementation.
++		// Reject compressed packets rather than treating them as plaintext.
++		return nil, ErrLZODecompress
+ 	default:
+ 		return nil, ErrLZODecompress
+ 	}

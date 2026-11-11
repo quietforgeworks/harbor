@@ -1,0 +1,1095 @@
+[
+  {
+    "module": "github.com/RyuaNerin/go-krypto",
+    "version": "v1.3.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/RyuaNerin/go-krypto/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/Yawning/aez",
+    "version": "v0.0.0-20211027044916-e49e68abd344",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/Yawning/aez/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/ajg/form",
+    "version": "v1.7.1",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/ajg/form/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/akutz/memconn",
+    "version": "v0.1.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/akutz/memconn/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/andybalholm/brotli",
+    "version": "v1.1.1",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/andybalholm/brotli/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/bahlo/generic-list-go",
+    "version": "v0.2.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/bahlo/generic-list-go/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/bodgit/plumbing",
+    "version": "v1.3.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/bodgit/plumbing/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/bodgit/windows",
+    "version": "v1.0.1",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/bodgit/windows/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/coder/websocket",
+    "version": "v1.8.12",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/coder/websocket/LICENSE.txt"
+    ]
+  },
+  {
+    "module": "github.com/coreos/go-iptables",
+    "version": "v0.8.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/coreos/go-iptables/LICENSE",
+      "vendor/github.com/coreos/go-iptables/NOTICE"
+    ]
+  },
+  {
+    "module": "github.com/dlclark/regexp2",
+    "version": "v1.12.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/dlclark/regexp2/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/dunglas/httpsfv",
+    "version": "v1.0.2",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/dunglas/httpsfv/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/enfein/mieru/v3",
+    "version": "v3.38.1",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/enfein/mieru/v3/LICENSE",
+      "vendor/github.com/enfein/mieru/v3/pkg/log/LICENSE",
+      "vendor/github.com/enfein/mieru/v3/pkg/socks5/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/ericlagergren/aegis",
+    "version": "v0.0.0-20250325060835-cd0defd64358",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/ericlagergren/aegis/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/ericlagergren/polyval",
+    "version": "v0.0.0-20220411101811-e25bc10ba391",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/ericlagergren/polyval/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/ericlagergren/siv",
+    "version": "v0.0.0-20220507050439-0b757b3aa5f1",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/ericlagergren/siv/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/ericlagergren/subtle",
+    "version": "v0.0.0-20220507045147-890d697da010",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/ericlagergren/subtle/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/fsnotify/fsnotify",
+    "version": "v1.9.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/fsnotify/fsnotify/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/fxamacker/cbor/v2",
+    "version": "v2.9.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/fxamacker/cbor/v2/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/gaukas/godicttls",
+    "version": "v0.0.4",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/gaukas/godicttls/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/go-ole/go-ole",
+    "version": "v1.3.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/go-ole/go-ole/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/gobwas/httphead",
+    "version": "v0.1.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/gobwas/httphead/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/gobwas/pool",
+    "version": "v0.2.1",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/gobwas/pool/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/gobwas/ws",
+    "version": "v1.4.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/gobwas/ws/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/gofrs/uuid/v5",
+    "version": "v5.4.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/gofrs/uuid/v5/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/golang/groupcache",
+    "version": "v0.0.0-20241129210726-2c02b8208cf8",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/golang/groupcache/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/golang/snappy",
+    "version": "v1.0.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/golang/snappy/AUTHORS",
+      "vendor/github.com/golang/snappy/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/google/btree",
+    "version": "v1.1.3",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/google/btree/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/google/go-cmp",
+    "version": "v0.6.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/google/go-cmp/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/google/pprof",
+    "version": "v0.0.0-20240727154555-813a5fbdbec8",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/google/pprof/AUTHORS",
+      "vendor/github.com/google/pprof/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/hashicorp/golang-lru/v2",
+    "version": "v2.0.7",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/hashicorp/golang-lru/v2/LICENSE",
+      "vendor/github.com/hashicorp/golang-lru/v2/simplelru/LICENSE_list"
+    ]
+  },
+  {
+    "module": "github.com/insomniacslk/dhcp",
+    "version": "v0.0.0-20250109001534-8abf58130905",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/insomniacslk/dhcp/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/josharian/native",
+    "version": "v1.1.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/josharian/native/license"
+    ]
+  },
+  {
+    "module": "github.com/jsimonetti/rtnetlink",
+    "version": "v1.4.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/jsimonetti/rtnetlink/LICENSE.md"
+    ]
+  },
+  {
+    "module": "github.com/klauspost/compress",
+    "version": "v1.17.9",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/klauspost/compress/LICENSE",
+      "vendor/github.com/klauspost/compress/internal/snapref/LICENSE",
+      "vendor/github.com/klauspost/compress/zstd/internal/xxhash/LICENSE.txt"
+    ]
+  },
+  {
+    "module": "github.com/klauspost/cpuid/v2",
+    "version": "v2.2.6",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/klauspost/cpuid/v2/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/klauspost/reedsolomon",
+    "version": "v1.12.3",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/klauspost/reedsolomon/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/mdlayher/netlink",
+    "version": "v1.7.2",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/mdlayher/netlink/LICENSE.md"
+    ]
+  },
+  {
+    "module": "github.com/mdlayher/socket",
+    "version": "v0.5.1",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/mdlayher/socket/LICENSE.md"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/age",
+    "version": "v0.0.0-20260603010618-28d156b4ea78",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/age/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/amneziawg-go",
+    "version": "v0.0.0-20260908071407-0c1c6f40ecd7",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/amneziawg-go/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/ascon",
+    "version": "v0.1.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/ascon/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/bart",
+    "version": "v0.29.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/bart/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/bbolt",
+    "version": "v0.0.0-20260706163408-d4ec34ad7c48",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/bbolt/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/blake3",
+    "version": "v0.1.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/blake3/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/chacha",
+    "version": "v0.1.5",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/chacha/chachapoly1305/LICENSE",
+      "vendor/github.com/metacubex/chacha/poly1305/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/chi",
+    "version": "v0.1.1",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/chi/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/connect-ip-go",
+    "version": "v0.0.0-20260727083417-67ccdb0cf771",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/connect-ip-go/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/cpu",
+    "version": "v0.1.2",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/cpu/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/edwards25519",
+    "version": "v1.2.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/edwards25519/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/fswatch",
+    "version": "v0.1.1",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/fswatch/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/gopacket",
+    "version": "v1.1.20-0.20230608035415-7e2f98a3e759",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/gopacket/AUTHORS",
+      "vendor/github.com/metacubex/gopacket/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/gvisor",
+    "version": "v0.0.0-20260922041103-e2cbcd6e7400",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/gvisor/AUTHORS",
+      "vendor/github.com/metacubex/gvisor/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/hkdf",
+    "version": "v0.1.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/hkdf/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/hpke",
+    "version": "v0.1.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/hpke/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/http",
+    "version": "v0.1.8",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/http/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/jls-quic-go",
+    "version": "v0.0.0-20260727080412-732f2fc9a34d",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/jls-quic-go/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/jls-tls",
+    "version": "v0.0.0-20260723084315-67adc0e2f796",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/jls-tls/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/jsonv2",
+    "version": "v0.0.0-20260721082349-16b4998c8f89",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/jsonv2/AUTHORS",
+      "vendor/github.com/metacubex/jsonv2/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/kcp-go",
+    "version": "v0.0.0-20260105040817-550693377604",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/kcp-go/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/mhurl",
+    "version": "v0.1.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/mhurl/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/mipstack",
+    "version": "v0.0.0-20261019124225-9a80a07eaeb9",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/mipstack/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/mlkem",
+    "version": "v0.1.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/mlkem/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/nftables",
+    "version": "v0.0.0-20260426003805-208c2c1ba2cb",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/nftables/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/qpack",
+    "version": "v0.6.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/qpack/LICENSE.md"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/quic-go",
+    "version": "v0.61.1-0.20260727080200-2548683b76f4",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/quic-go/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/randv2",
+    "version": "v0.2.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/randv2/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/restls-client-go",
+    "version": "v0.1.9",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/restls-client-go/LICENSE",
+      "vendor/github.com/metacubex/restls-client-go/LICENSE-RESTLS"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/sevenzip",
+    "version": "v1.6.4",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/sevenzip/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/sing",
+    "version": "v0.5.8",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/sing/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/sing-mux",
+    "version": "v0.3.12",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/sing-mux/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/sing-quic",
+    "version": "v0.0.0-20260904234848-1c242664697a",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/sing-quic/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/sing-shadowsocks",
+    "version": "v0.2.13",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/sing-shadowsocks/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/sing-shadowsocks2",
+    "version": "v0.2.8",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/sing-shadowsocks2/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/sing-tun",
+    "version": "v0.4.28",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/sing-tun/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/sing-vmess",
+    "version": "v0.2.5",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/sing-vmess/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/sing-wireguard",
+    "version": "v0.0.0-20261002050126-e5fa1a607406",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/sing-wireguard/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/smux",
+    "version": "v0.0.0-20260105030934-d0c8756d3141",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/smux/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/ssh",
+    "version": "v0.1.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/ssh/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/tailscale",
+    "version": "v0.0.0-20260821153257-ff0ecd818181",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/tailscale/LICENSE",
+      "vendor/github.com/metacubex/tailscale/PATENTS",
+      "vendor/github.com/metacubex/tailscale/tempfork/goupnp/LICENSE",
+      "vendor/github.com/metacubex/tailscale/tempfork/oauth2/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/tailscale-wireguard-go",
+    "version": "v0.0.0-20260725073821-e61ab99cede2",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/tailscale-wireguard-go/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/tfo-go",
+    "version": "v0.0.0-20260623020846-376a77860b8c",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/tfo-go/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/tls",
+    "version": "v0.1.9",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/tls/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/utls",
+    "version": "v1.8.8",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/utls/LICENSE",
+      "vendor/github.com/metacubex/utls/dicttls/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/wireguard-go",
+    "version": "v0.0.0-20250820062549-a6cecdd7f57f",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/wireguard-go/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/yamux",
+    "version": "v0.0.0-20250918083631-dd5f17c0be49",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/yamux/LICENSE",
+      "vendor/github.com/metacubex/yamux/LICENSE-BSD"
+    ]
+  },
+  {
+    "module": "github.com/metacubex/zerotier-go",
+    "version": "v0.0.0-20260813124750-13fa6f45da5f",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/metacubex/zerotier-go/LICENSE",
+      "vendor/github.com/metacubex/zerotier-go/NOTICE"
+    ]
+  },
+  {
+    "module": "github.com/miekg/dns",
+    "version": "v1.1.63",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/miekg/dns/AUTHORS",
+      "vendor/github.com/miekg/dns/COPYRIGHT",
+      "vendor/github.com/miekg/dns/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/mitchellh/go-ps",
+    "version": "v1.0.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/mitchellh/go-ps/LICENSE.md"
+    ]
+  },
+  {
+    "module": "github.com/mroth/weightedrand/v2",
+    "version": "v2.1.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/mroth/weightedrand/v2/LICENSE.txt"
+    ]
+  },
+  {
+    "module": "github.com/oasisprotocol/deoxysii",
+    "version": "v0.0.0-20220228165953-2091330c22b7",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/oasisprotocol/deoxysii/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/openacid/low",
+    "version": "v0.1.21",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/openacid/low/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/oschwald/maxminddb-golang",
+    "version": "v1.12.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/oschwald/maxminddb-golang/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/pierrec/lz4/v4",
+    "version": "v4.1.27",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/pierrec/lz4/v4/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/pires/go-proxyproto",
+    "version": "v0.8.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/pires/go-proxyproto/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/safchain/ethtool",
+    "version": "v0.3.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/safchain/ethtool/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/sagernet/netlink",
+    "version": "v0.0.0-20240612041022-b9a21c07ac6a",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/sagernet/netlink/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/samber/lo",
+    "version": "v1.53.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/samber/lo/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/sina-ghaderi/poly1305",
+    "version": "v0.0.0-20220724002748-c5926b03988b",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/sina-ghaderi/poly1305/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/sina-ghaderi/rabaead",
+    "version": "v0.0.0-20220730151906-ab6e06b96e8c",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/sina-ghaderi/rabaead/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/sina-ghaderi/rabbitio",
+    "version": "v0.0.0-20220730151941-9ce26f4f872e",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/sina-ghaderi/rabbitio/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/sirupsen/logrus",
+    "version": "v1.9.4",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/sirupsen/logrus/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/stangelandcl/ppmd",
+    "version": "v0.1.1",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/stangelandcl/ppmd/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/stretchr/testify",
+    "version": "v1.12.1",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/stretchr/testify/LICENSE",
+      "vendor/github.com/stretchr/testify/internal/difflib/LICENSE",
+      "vendor/github.com/stretchr/testify/internal/spew/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/tailscale/certstore",
+    "version": "v0.1.1-0.20260409135935-3638fb84b77d",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/tailscale/certstore/LICENSE.md"
+    ]
+  },
+  {
+    "module": "github.com/tailscale/go-winio",
+    "version": "v0.0.0-20231025203758-c4f33415bf55",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/tailscale/go-winio/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/tailscale/hujson",
+    "version": "v0.0.0-20221223112325-20486734a56a",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/tailscale/hujson/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/tailscale/peercred",
+    "version": "v0.0.0-20250107143737-35a0c7bd7edc",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/tailscale/peercred/AUTHORS",
+      "vendor/github.com/tailscale/peercred/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/u-root/uio",
+    "version": "v0.0.0-20230220225925-ffce2a382923",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/u-root/uio/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/ulikunitz/xz",
+    "version": "v0.5.15",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/ulikunitz/xz/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/vishvananda/netns",
+    "version": "v0.0.5",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/vishvananda/netns/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/vmihailenco/msgpack/v5",
+    "version": "v5.4.1",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/vmihailenco/msgpack/v5/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/vmihailenco/tagparser/v2",
+    "version": "v2.0.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/vmihailenco/tagparser/v2/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/x448/float16",
+    "version": "v0.8.4",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/x448/float16/LICENSE"
+    ]
+  },
+  {
+    "module": "github.com/yosida95/uritemplate/v3",
+    "version": "v3.0.2",
+    "replacement": null,
+    "notice_files": [
+      "vendor/github.com/yosida95/uritemplate/v3/LICENSE"
+    ]
+  },
+  {
+    "module": "gitlab.com/go-extension/aes-ccm",
+    "version": "v0.0.0-20230221065045-e58665ef23c7",
+    "replacement": null,
+    "notice_files": [
+      "vendor/gitlab.com/go-extension/aes-ccm/LICENSE"
+    ]
+  },
+  {
+    "module": "gitlab.com/yawning/bsaes.git",
+    "version": "v0.0.0-20190805113838-0a714cd429ec",
+    "replacement": null,
+    "notice_files": [
+      "vendor/gitlab.com/yawning/bsaes.git/LICENSE.txt"
+    ]
+  },
+  {
+    "module": "go.uber.org/automaxprocs",
+    "version": "v1.6.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/go.uber.org/automaxprocs/LICENSE"
+    ]
+  },
+  {
+    "module": "go.yaml.in/yaml/v3",
+    "version": "v3.0.5",
+    "replacement": null,
+    "notice_files": [
+      "vendor/go.yaml.in/yaml/v3/LICENSE",
+      "vendor/go.yaml.in/yaml/v3/NOTICE"
+    ]
+  },
+  {
+    "module": "go4.org/mem",
+    "version": "v0.0.0-20240501181205-ae6ca9944745",
+    "replacement": null,
+    "notice_files": [
+      "vendor/go4.org/mem/LICENSE"
+    ]
+  },
+  {
+    "module": "go4.org/netipx",
+    "version": "v0.0.0-20260823151212-3075585bcbeb",
+    "replacement": null,
+    "notice_files": [
+      "vendor/go4.org/netipx/AUTHORS",
+      "vendor/go4.org/netipx/LICENSE"
+    ]
+  },
+  {
+    "module": "golang.org/x/crypto",
+    "version": "v0.33.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/golang.org/x/crypto/LICENSE",
+      "vendor/golang.org/x/crypto/PATENTS"
+    ]
+  },
+  {
+    "module": "golang.org/x/exp",
+    "version": "v0.0.0-20240904232852-e7e105dedf7e",
+    "replacement": null,
+    "notice_files": [
+      "vendor/golang.org/x/exp/LICENSE",
+      "vendor/golang.org/x/exp/PATENTS"
+    ]
+  },
+  {
+    "module": "golang.org/x/mod",
+    "version": "v0.20.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/golang.org/x/mod/LICENSE",
+      "vendor/golang.org/x/mod/PATENTS"
+    ]
+  },
+  {
+    "module": "golang.org/x/net",
+    "version": "v0.35.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/golang.org/x/net/LICENSE",
+      "vendor/golang.org/x/net/PATENTS"
+    ]
+  },
+  {
+    "module": "golang.org/x/sync",
+    "version": "v0.11.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/golang.org/x/sync/LICENSE",
+      "vendor/golang.org/x/sync/PATENTS"
+    ]
+  },
+  {
+    "module": "golang.org/x/sys",
+    "version": "v0.30.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/golang.org/x/sys/LICENSE",
+      "vendor/golang.org/x/sys/PATENTS"
+    ]
+  },
+  {
+    "module": "golang.org/x/term",
+    "version": "v0.29.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/golang.org/x/term/LICENSE",
+      "vendor/golang.org/x/term/PATENTS"
+    ]
+  },
+  {
+    "module": "golang.org/x/text",
+    "version": "v0.22.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/golang.org/x/text/LICENSE",
+      "vendor/golang.org/x/text/PATENTS"
+    ]
+  },
+  {
+    "module": "golang.org/x/time",
+    "version": "v0.10.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/golang.org/x/time/LICENSE",
+      "vendor/golang.org/x/time/PATENTS"
+    ]
+  },
+  {
+    "module": "golang.org/x/tools",
+    "version": "v0.24.0",
+    "replacement": null,
+    "notice_files": [
+      "vendor/golang.org/x/tools/LICENSE",
+      "vendor/golang.org/x/tools/PATENTS"
+    ]
+  },
+  {
+    "module": "google.golang.org/protobuf",
+    "version": "v1.34.2",
+    "replacement": "github.com/metacubex/protobuf-go v0.0.0-20260306035419-7ceee0674686",
+    "notice_files": [
+      "vendor/google.golang.org/protobuf/LICENSE",
+      "vendor/google.golang.org/protobuf/PATENTS"
+    ]
+  }
+]

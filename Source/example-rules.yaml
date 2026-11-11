@@ -1,0 +1,5 @@
+# 追加在内置保护规则之后，PROXY 表示用户选择的节点。
+rules:
+  - DOMAIN-SUFFIX,example.org,PROXY
+  - DOMAIN,intranet.example.net,DIRECT
+  - IP-CIDR,203.0.113.0/24,PROXY,no-resolve

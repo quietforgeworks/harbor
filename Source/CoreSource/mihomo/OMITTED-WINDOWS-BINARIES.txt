@@ -1,0 +1,6 @@
+This source delivery targets Darwin arm64 only. These unused Windows binary resources were omitted; Windows builds are not supported by this artifact.
+
+vendor/github.com/metacubex/sing-tun/internal/wintun/amd64/wintun.dll
+vendor/github.com/metacubex/sing-tun/internal/wintun/x86/wintun.dll
+vendor/github.com/metacubex/sing-tun/internal/wintun/arm/wintun.dll
+vendor/github.com/metacubex/sing-tun/internal/wintun/arm64/wintun.dll
