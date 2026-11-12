@@ -1,51 +1,69 @@
 # Harbor 0.3.0 source snapshot
 
-macOS 26+ / Apple Silicon 菜单栏代理。Swift/AppKit 原生玻璃界面，Mihomo v1.19.33-harbor.1 修复内核，无 Dock 图标。
+Harbor is a menu bar proxy client for macOS 26+ on Apple Silicon. It uses a native Swift/AppKit glass-style interface and the patched Mihomo v1.19.33-harbor.1 core, without a Dock icon.
 
-## 界面与使用
+## Interface and traffic
 
-所有页面在同一菜单栏面板内切换：主面板、设置、机场列表、节点列表和规则编辑器。返回按钮保留列表位置和规则草稿；文件导入使用系统文件选择器。
+The main panel, settings, subscription providers, nodes, and rule editor share one menu bar panel. Back navigation preserves list positions and rule drafts. File imports use the system file picker.
 
-主面板的测速按钮只检测当前节点。节点页提供搜索、延迟排序、全部测速和停止操作。切换机场由设置中的“切换机场”单独进入，不与节点测速混在一起。
+The main panel tests the current node. The node page supports search, latency sorting, batch tests, and cancellation. Provider switching has a separate settings entry.
 
-下载、上传左右分栏，上方是速率（B/s、KB/s、MB/s），下方为本次连接累计流量。速率用内核累计字节差除以实际单调时钟间隔计算，约每2秒刷新。首次采样、读取失败、计数器重置或休眠长间隔显示不可用，不冒充0；无新增流量才显示0 B/s。这些统计仅涵盖内核处理的流量，不等于整机所有网卡流量。
+Upload and download each show the current rate and connection-session total. Rates use core byte-counter differences divided by the elapsed monotonic-clock interval, refreshing about every 2 seconds. Initial samples, failed reads, counter resets, and long sleep gaps display unavailable; no traffic displays 0 B/s. Statistics cover traffic handled by the core.
 
-## 多机场
+## Subscription providers
 
-设置中粘贴 HTTPS 订阅并点“＋”添加机场。同一链接再次导入会更新已有机场。每个机场独立保存节点选择、额度、更新时间与自动更新设置。URL 只保存在钥匙串；本机节点配置目录权限0700、文件0600。
+Paste an HTTPS subscription URL in settings and use + to add a provider. Importing the same URL updates the existing provider. Each provider retains its node selection, quota, update time, and automatic-update setting. URLs are stored in Keychain; local node configuration uses directory permissions 0700 and file permissions 0600.
 
-切换机场或节点时先检测候选节点；已连接时复用当前内核并验证切换结果，失败恢复原配置。订阅更新保留正在使用的会话，后续切换或重连应用新配置。
+Provider and node switches test the candidate first. Active connections reuse the current core, check the result, and restore the previous configuration if switching fails. Subscription updates preserve the active session; the new configuration applies on a later switch or reconnect.
 
-自动更新遵循机场提供的 profile-update-interval，缺省24小时。下载或校验失败保留原配置，并至少间隔15分钟再自动重试。应用需保持运行。
+Automatic updates follow the provider's `profile-update-interval`, defaulting to 24 hours. Failed downloads or validation retain the previous configuration and wait at least 15 minutes before an automatic retry. The app must remain running.
 
-保留订阅中用于节点服务器域名的 HTTPS DNS 解析端点。此解析用于兼容依赖专用 DNS 的节点；不监听 DNS 端口，不修改 macOS DNS，不执行订阅的全局规则、外部控制接口或 TUN。普通直连仍使用系统解析。
+HTTPS DNS endpoints supplied for node-server domains are retained for node compatibility. Ordinary direct connections use system resolution. Harbor does not open a DNS listener, change macOS DNS, or apply a subscription's global rules, external controller, or TUN settings.
 
-## 规则
+The 0.3.0 source snapshot adds proxy groups with up to five backup nodes, group latency tests, and failover. The downloadable release remains 0.2.0 build 8.
 
-规则模式默认：OpenAI/ChatGPT、Anthropic/Claude、Google/Gemini 及明确依赖走节点；Apple、局域网和其他网页直连。全局模式：外网走节点，局域网保留直连。
+## Routing rules
 
-点击分流规则卡片可查看并编辑完整规则模式配置。支持 DOMAIN、DOMAIN-SUFFIX、DOMAIN-KEYWORD、IP-CIDR、IP-CIDR6，目标 DIRECT、PROXY（内部SELECT）或REJECT。最后必须有且只有一条 MATCH。保存前检查语法和内核兼容性，已连接时热加载，失败回滚。完整编辑可改变默认规则；恢复默认按钮可撤销此覆盖。导入旧式规则片段时追加在默认规则后。规则模式的编辑不会改变全局模式逻辑。
+Default rule mode routes OpenAI/ChatGPT, Anthropic/Claude, Google/Gemini, and their specified dependencies through the proxy. Apple services, local-network destinations, and other websites use direct connections. Global mode proxies external traffic while keeping local-network traffic direct.
 
-## 连接与恢复
+The routing card opens the complete rule-mode editor. Supported rule types are `DOMAIN`, `DOMAIN-SUFFIX`, `DOMAIN-KEYWORD`, `IP-CIDR`, and `IP-CIDR6`; targets are `DIRECT`, `PROXY` (internally `SELECT`), and `REJECT`. Exactly one final `MATCH` rule is required.
 
-先在原代理软件中断开，再连接 Harbor；已有系统代理或实际 TUN 路由时拒绝覆盖。第一次接管系统 HTTP/HTTPS 代理可能要求 macOS 授权。
+Saving checks syntax and core compatibility, reloads active connections, and rolls back on failure. Restore Defaults removes the override. Imported legacy rule fragments are appended after the defaults. Rule-mode edits do not change global-mode behavior.
 
-断开或退出先恢复仍属于 Harbor 的系统代理项，再停内核；独立守护进程尝试处理应用或内核异常退出，恢复失败保留记录。不会覆盖其他软件后来做出的设置修改。节点连续三次健康检查失败会尝试恢复原网络。
+## Connection and recovery
 
-第一版仍是系统代理，不包含 TUN。忽略系统代理的应用、UDP/QUIC不自动覆盖，也不是系统级断网开关。AI检测表示HTTPS响应，不证明账号登录、聊天、上传或地区权限。
+Disconnect another proxy client before connecting Harbor. Harbor does not replace an active system proxy or TUN route. Initial HTTP/HTTPS system-proxy configuration may require macOS authorization.
 
-## 构建与验证
+Disconnecting or quitting restores system-proxy entries still owned by Harbor before stopping the core. A separate watchdog handles application or core exits, retains recovery records if restoration fails, and preserves settings changed by another application. Three consecutive failed node-health checks trigger an attempt to restore the previous network configuration.
 
-运行 ./build.sh，需要支持 macOS 26 SDK 的 Xcode 命令行工具和 Go 1.26.10。Yams 与修复后的 Mihomo 完整源码、依赖和许可证均已附，构建无需解析远程依赖。脚本校验源码清单，始终从所附修复源码重建内核，不会回退到旧官方二进制；构建文件与缓存均在源码目录内。应用使用本地 ad-hoc 签名，未经过 Apple 公证。
+## Current limitations
 
-测试涵盖规则解析、旧配置迁移、多机场切换、回滚、单节点测试、取消测速、速率计算与恢复事务。页面检查使用独立示例配置，验证连续/反向过渡、关闭重开、输入和窗口锚点。真实系统代理崩溃恢复未强制演练。
+- Uses the system HTTP/HTTPS proxy, without TUN or a system-wide kill switch. Applications that ignore system proxies and UDP/QUIC traffic are not automatically covered.
+- AI connectivity checks measure HTTPS responses, rather than account login, chat, uploads, or region access.
+- The app is ad-hoc-signed and is not Apple-notarized.
+- The patched core removes EasyTier and go-lzo dependencies. EasyTier requests and LZO-compressed data fail explicitly. EasyTier and OpenVPN are outside Harbor's supported node-protocol list.
+- Real system-proxy takeover and forced-crash recovery, fresh installation, and independent macOS 26 testing remain incomplete.
 
-源码与发布包不含用户订阅、节点密码或控制密钥。来源与许可证见 LICENSE、THIRD-PARTY.md、ROUTING-SOURCES.md。
+## Build and validation
 
-## 此公开版的验证范围
+Use Xcode command-line tools supporting the macOS 26 SDK and Go 1.26.10. Run from this directory:
 
-0.2.0 build 8 于 2026-11-08 在 Apple Silicon、macOS 27.2、Xcode 27.2 上验证，部署目标为 macOS 26.0。没有在独立 macOS 26 机器上验证，也没有强制中断用户正在使用的代理来演练系统代理接管或异常恢复。详细结果见随发布提供的 VALIDATION.json。
+```sh
+./build.sh
+```
 
-修复内核移除了 EasyTier 与 go-lzo 依赖；EasyTier 请求和 LZO 压缩数据会明确失败，不会静默降级。Harbor 原有节点协议白名单不包含 EasyTier 和 OpenVPN，因此未删减本应用已支持的节点类型。具体修改、来源、完整依赖许可、源码校验和离线重建说明见 CoreSource/mihomo/HARBOR-CORE-README.md。
+Yams, the patched Mihomo source, dependencies, and licenses are included. The build checks the source inventory and rebuilds the core from the bundled source without resolving remote dependencies. Build output and caches stay within the source directory.
 
-This source snapshot adds the local proxy-group changes. See the repository root README for validation limits; no new binary release is claimed.
+Tests cover rule parsing, legacy configuration migration, provider switching, rollback, node testing, cancellation, traffic-rate calculation, and recovery transactions. Recorded interface checks cover forward/back transitions, closing and reopening, input, and window anchors.
+
+Release 0.2.0 build 8 was tested on 2026-11-08 using Apple Silicon, macOS 27.2, and Xcode 27.2, with deployment target macOS 26.0. Release-specific results are in [VALIDATION.json](VALIDATION.json). The 0.3.0 source update passed 75 Swift unit tests and an app debug build; it has not completed release packaging, core rebuilding, or real-network and interface revalidation.
+
+## Next steps
+
+Validate proxy-group switching and failover on real connections, complete system-proxy recovery and fresh-install testing, and prepare a verified 0.3.0 release package.
+
+## License and sources
+
+Harbor uses GPL-3.0-or-later. See [LICENSE](LICENSE), [THIRD-PARTY.md](THIRD-PARTY.md), and [ROUTING-SOURCES.md](ROUTING-SOURCES.md).
+
+Core changes, dependency licenses, checksums, and offline rebuilding instructions are in [CoreSource/mihomo/HARBOR-CORE-README.md](CoreSource/mihomo/HARBOR-CORE-README.md).
