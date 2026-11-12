@@ -1,38 +1,44 @@
 # Harbor
 
-把代理收进菜单栏。
+Harbor is a menu bar proxy client for Apple Silicon Macs, with a native glass-style interface, subscription management, node testing, and routing-rule editing.
 
-Harbor 是为 Apple Silicon Mac 打造的轻量代理工具：原生玻璃界面、多机场管理、节点测速与完整规则编辑，都放在一个不打断工作的菜单栏面板里。
+## Features
 
-## 你会用到的功能
+- Rule-based and global proxy modes, node selection, latency tests, and traffic statistics.
+- Multiple subscription profiles, each with its own selected node, quota, and update settings.
+- Connection checks before switching profiles or nodes, with rollback on failure.
+- Full routing-rule editing, file import, and default-rule restoration.
+- Subscription URLs stored in macOS Keychain and node configurations stored locally.
+- The 0.3.0 source snapshot adds proxy groups with up to five backup nodes, group testing, and failover.
 
-- **一个面板，处理日常连接。** 规则与全局模式、节点选择、测速和流量统计随手可见。
-- **多个机场，各自记住。** 每个订阅独立保存节点选择、额度和更新时间；切换先检测，失败保留原会话。
-- **分流规则自己掌握。** 编辑完整规则、导入文件或恢复默认，保存前检查语法与内核兼容性。
-- **让网络信息留在本机。** 订阅链接保存在 macOS 钥匙串，节点配置使用本地私有文件；订阅更新、测速和代理访问仍然需要联网。
+## Requirements and download
 
-## 下载与要求
+Requires **macOS 26 or later on Apple Silicon**.
 
-安装包在本项目的 Releases 页面：**Harbor 0.2.0，build 8**。
+The current [binary release](https://github.com/quietforgeworks/harbor/releases) is **Harbor 0.2.0, build 8**. It includes an application ZIP, corresponding source ZIP, SHA-256 checksums, and validation records.
 
-- macOS 26 或更高版本，Apple Silicon。
-- 应用 ZIP、完整对应源码 ZIP、SHA256 校验文件和验证记录一起提供。
-- 本版本为本地 ad-hoc 签名，尚未使用 Developer ID 签名，也未经过 Apple 公证。首次运行可能被 macOS 拦截；请先核对来源和校验值，再使用系统提供的打开方式。
+The repository source is **0.3.0, build 8**, using the patched **Mihomo v1.19.33-harbor.1** core. The 0.3.0 source update passed 75 Swift unit tests and a debug build; a new binary release has not been packaged.
 
-## 使用前需要知道
+## Current limitations
 
-Harbor 使用系统 HTTP/HTTPS 代理，不包含 TUN，也不是系统级断网开关。忽略系统代理的应用和 UDP/QUIC 不会自动覆盖。连接前请自行处理已有代理或 VPN；Harbor 会拒绝覆盖正在使用的系统代理。HTTPS 检测不代表账号登录、地区权限或完整业务流程可用。
+- Harbor uses the system HTTP/HTTPS proxy. It does not include TUN or a system-wide kill switch, and applications that ignore the system proxy, including UDP/QUIC traffic, are not automatically covered.
+- Existing system proxy settings must be disconnected before Harbor takes control.
+- HTTPS connectivity tests check endpoint responses, not account login or service-specific access.
+- Distribution uses ad-hoc signing and is not Apple-notarized.
+- Live network switching, UI interaction, complete release packaging, and core rebuilding for the 0.3.0 snapshot still need validation. The existing `SHA256SUMS.txt` and `VALIDATION.json` describe the 0.2.0 release.
 
-本次测试没有替换已安装的 Harbor，没有改动用户原有文件、系统代理或现有连接。系统代理真实接管、强制崩溃恢复和新 Mac 安装仍有验证边界，详见 VALIDATION.json。
+## Development directions
 
-## 构建与许可证
+- Validate proxy-group switching and failover under real network conditions.
+- Complete system-proxy takeover and crash-recovery tests.
+- Test installation on a clean Mac and package the next binary release.
 
-下载完整源码包后，使用支持 macOS 26 SDK 的 Xcode 工具链和 Go 1.26.10，运行 Source/build.sh。Yams、修复后的 Mihomo 源码及所需依赖均已包含，可离线重建；不会下载或回退到旧内核。
+## Build and documentation
 
-Harbor 使用 **GPL-3.0-or-later**，第三方代码保留各自许可证。修复内核版本为 **v1.19.33-harbor.1**，源码包内附修改记录、依赖许可清单和可复现构建说明。
+Use an Xcode toolchain supporting the macOS 26 SDK and Go 1.26.10, then run `Source/build.sh`. Yams, the patched Mihomo source, and required dependencies are included for offline rebuilding.
 
-## 当前源码进展
+See the [source guide](Source/README.md) for usage, routing behavior, and build details.
 
-`Source/` 现包含 Harbor 0.3.0 build 8 的本地应用进展：最多五个备用节点的代理组、组内测速与故障转移。保留 0.2.0 发布时的修复内核 v1.19.33-harbor.1、完整对应源码、许可证和离线构建方式，不采用本地旧脚本下载未修复内核的路径。
+## License
 
-本次源码同步通过 75 项 Swift 单元测试，并完成应用调试构建。尚未重新验证真实网络切换、界面交互、完整发行打包和核心重建；因此不是新的二进制正式发布。上方 Releases 下载仍为 0.2.0，原 SHA256SUMS.txt 和 VALIDATION.json 仍仅对应原发布。
+**GPL-3.0-or-later**. Third-party components retain their respective licenses. The core source package includes modification notes, dependency licenses, and reproducible-build instructions.
